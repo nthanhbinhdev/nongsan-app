@@ -33,7 +33,7 @@ const imageMapping = {
 const IMAGE_FOLDER = path.join(__dirname, "Product_Images");
 
 async function uploadImages() {
-  console.log("BẮT ĐẦU UPLOAD ẢNH LÊN CLOUDINARY...\n");
+  console.log("BẮT ĐẦU UPLOAD ẢNH LÊN...\n");
 
   const uploadedImages = {};
   const files = fs.readdirSync(IMAGE_FOLDER);

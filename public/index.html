@@ -6,12 +6,13 @@
     <title>Hệ Thống Quản Lý Nông Sản Phân Tán</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
+
   <body>
     <!-- HEADER -->
     <header class="main-header">
       <div class="header-container">
         <div class="logo">
-          <span class="logo-icon"></span>
+          <span class="logo-icon">🌾</span>
           <div class="logo-text">
             <h1>Hệ Thống Nông Sản</h1>
           </div>
@@ -58,11 +59,19 @@
       </button>
       <button
         class="tab-btn"
-        data-tab="distribution"
-        onclick="switchTab('distribution')"
+        data-tab="inventory"
+        onclick="switchTab('inventory')"
       >
         <span class="tab-icon"></span>
-        <span>Kiến trúc phân tán</span>
+        <span>Quản lý tồn kho</span>
+      </button>
+      <button
+        class="tab-btn"
+        data-tab="warehouses"
+        onclick="switchTab('warehouses')"
+      >
+        <span class="tab-icon"></span>
+        <span>Quản lý kho</span>
       </button>
       <button
         class="tab-btn"
@@ -96,11 +105,18 @@
         <div id="products-table" class="data-table-wrapper"></div>
       </section>
 
-      <!-- TAB: ĐƠN HÀNG -->
+      <!-- TAB: ĐơN HÀNG -->
       <section id="tab-orders" class="tab-content">
         <div class="section-header">
           <h2>Danh sách Đơn hàng</h2>
           <div class="header-actions">
+            <div class="search-box">
+              <input
+                type="text"
+                id="search-orders"
+                placeholder="Tìm theo tên khách hàng..."
+              />
+            </div>
             <span class="record-count" id="orders-count">0 đơn hàng</span>
             <button class="btn-primary" onclick="openAddOrderModal()">
               + Thêm đơn hàng
@@ -113,8 +129,15 @@
       <!-- TAB: KHÁCH HÀNG -->
       <section id="tab-customers" class="tab-content">
         <div class="section-header">
-          <h2>👥 Danh sách Khách hàng</h2>
+          <h2>Danh sách Khách hàng</h2>
           <div class="header-actions">
+            <div class="search-box">
+              <input
+                type="text"
+                id="search-customers"
+                placeholder="Tìm theo tên hoặc SĐT..."
+              />
+            </div>
             <span class="record-count" id="customers-count">0 khách hàng</span>
             <button class="btn-primary" onclick="openAddCustomerModal()">
               + Thêm khách hàng
@@ -124,147 +147,29 @@
         <div id="customers-table" class="data-table-wrapper"></div>
       </section>
 
-      <!-- TAB: KIẾN TRÚC PHÂN TÁN -->
-      <section id="tab-distribution" class="tab-content">
+      <!-- TAB: QUẢN LÝ TỒN KHO -->
+      <section id="tab-inventory" class="tab-content">
         <div class="section-header">
-          <h2>Kiến trúc Hệ thống Phân tán</h2>
-        </div>
-        <div class="distribution-architecture">
-          <div class="server-card master">
-            <div class="server-icon">🖥️</div>
-            <h3>SERVER (Master/Publisher)</h3>
-            <p class="server-name">DESKTOP-1RUUANR\SERVER</p>
-            <div class="server-details">
-              <div class="detail-item">
-                <span>Database:</span>
-                <strong>NongSan_Master</strong>
-              </div>
-              <div class="detail-item">
-                <span>Vai trò:</span>
-                <strong>Distributor + Publisher</strong>
-              </div>
-              <div class="detail-item">
-                <span>Publications:</span>
-                <strong>3 (Pub_MienBac, Pub_MienTrung, Pub_MienNam)</strong>
-              </div>
-            </div>
-          </div>
-
-          <div class="replication-flow">
-            <div class="flow-arrow">
-              <span>Replication</span>
-              <div class="arrow-line"></div>
-            </div>
-          </div>
-
-          <div class="client-servers">
-            <div class="server-card client region-mienbac">
-              <div class="server-icon">💻</div>
-              <h3>CLIENT 1 - Miền Bắc</h3>
-              <p class="server-name">DESKTOP-1RUUANR\CLIENT1</p>
-              <div class="server-details">
-                <div class="detail-item">
-                  <span>Database:</span>
-                  <strong>NongSan_MienBac</strong>
-                </div>
-                <div class="detail-item">
-                  <span>Subscription:</span>
-                  <strong>Pub_MienBac</strong>
-                </div>
-                <div class="detail-item">
-                  <span>Dữ liệu:</span>
-                  <strong>VungMien = 'MienBac'</strong>
-                </div>
-              </div>
-            </div>
-
-            <div class="server-card client region-mientrung">
-              <div class="server-icon">💻</div>
-              <h3>CLIENT 2 - Miền Trung</h3>
-              <p class="server-name">DESKTOP-1RUUANR\CLIENT2</p>
-              <div class="server-details">
-                <div class="detail-item">
-                  <span>Database:</span>
-                  <strong>NongSan_MienTrung</strong>
-                </div>
-                <div class="detail-item">
-                  <span>Subscription:</span>
-                  <strong>Pub_MienTrung</strong>
-                </div>
-                <div class="detail-item">
-                  <span>Dữ liệu:</span>
-                  <strong>VungMien = 'MienTrung'</strong>
-                </div>
-              </div>
-            </div>
-
-            <div class="server-card client region-miennam">
-              <div class="server-icon">💻</div>
-              <h3>CLIENT 3 - Miền Nam</h3>
-              <p class="server-name">DESKTOP-1RUUANR\CLIENT3</p>
-              <div class="server-details">
-                <div class="detail-item">
-                  <span>Database:</span>
-                  <strong>NongSan_MienNam</strong>
-                </div>
-                <div class="detail-item">
-                  <span>Subscription:</span>
-                  <strong>Pub_MienNam</strong>
-                </div>
-                <div class="detail-item">
-                  <span>Dữ liệu:</span>
-                  <strong>VungMien = 'MienNam'</strong>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="additional-services">
-            <div class="service-card mongodb">
-              <div class="service-icon">🍃</div>
-              <h3>MongoDB</h3>
-              <div class="server-details">
-                <div class="detail-item">
-                  <span>Host:</span>
-                  <strong>localhost:27017</strong>
-                </div>
-                <div class="detail-item">
-                  <span>Database:</span>
-                  <strong>nongsan_db</strong>
-                </div>
-                <div class="detail-item">
-                  <span>Collection:</span>
-                  <strong>hanghoa_details</strong>
-                </div>
-                <div class="detail-item">
-                  <span>Vai trò:</span>
-                  <strong
-                    >Lưu dữ liệu phi cấu trúc (Mô tả, đánh giá, URL ảnh)</strong
-                  >
-                </div>
-              </div>
-            </div>
-
-            <div class="service-card cloudinary">
-              <div class="service-icon">☁️</div>
-              <h3>Cloudinary</h3>
-              <div class="server-details">
-                <div class="detail-item">
-                  <span>Cloud:</span>
-                  <strong>dznbskxv6</strong>
-                </div>
-                <div class="detail-item">
-                  <span>Folder:</span>
-                  <strong>nongsan-images/</strong>
-                </div>
-                <div class="detail-item">
-                  <span>Vai trò:</span>
-                  <strong>Lưu trữ ảnh sản phẩm (Multimedia)</strong>
-                </div>
-              </div>
-            </div>
+          <h2>Quản lý Tồn kho</h2>
+          <div class="header-actions">
+            <span class="record-count" id="inventory-count">0 mục</span>
           </div>
         </div>
+        <div id="inventory-table" class="data-table-wrapper"></div>
+      </section>
+
+      <!-- TAB: QUẢN LÝ KHO -->
+      <section id="tab-warehouses" class="tab-content">
+        <div class="section-header">
+          <h2>Quản lý Kho</h2>
+          <div class="header-actions">
+            <span class="record-count" id="warehouses-count">0 kho</span>
+            <button class="btn-primary" onclick="openAddWarehouseModal()">
+              + Thêm kho
+            </button>
+          </div>
+        </div>
+        <div id="warehouses-table" class="data-table-wrapper"></div>
       </section>
 
       <!-- TAB: THỐNG KÊ -->
@@ -289,6 +194,91 @@
       </div>
     </div>
 
+    <!-- MODAL CHI TIẾT ĐƠN HÀNG -->
+    <div id="modal-order-detail" class="modal">
+      <div class="modal-content modal-large">
+        <button class="modal-close" onclick="closeModal('modal-order-detail')">
+          ×
+        </button>
+        <div id="order-detail-content"></div>
+      </div>
+    </div>
+
+    <!-- MODAL CHI TIẾT TỒN KHO -->
+    <div id="modal-inventory-detail" class="modal">
+      <div class="modal-content">
+        <button
+          class="modal-close"
+          onclick="closeModal('modal-inventory-detail')"
+        >
+          ×
+        </button>
+        <div id="inventory-detail-content"></div>
+      </div>
+    </div>
+
+    <!-- MODAL CẬP NHẬT TRẠNG THÁI ĐƠN HÀNG -->
+    <div id="modal-order-status" class="modal">
+      <div class="modal-content">
+        <button class="modal-close" onclick="closeModal('modal-order-status')">
+          ×
+        </button>
+        <h2>Cập nhật trạng thái đơn hàng</h2>
+        <form id="order-status-form" onsubmit="handleOrderStatusSubmit(event)">
+          <input type="hidden" id="status-order-id" />
+          <div class="form-group">
+            <label>Trạng thái hiện tại</label>
+            <input type="text" id="status-current" readonly />
+          </div>
+          <div class="form-group">
+            <label>Trạng thái mới <span class="required">*</span></label>
+            <select id="status-new" required>
+              <option value="Chờ xử lý">Chờ xử lý</option>
+              <option value="Đang giao">Đang giao</option>
+              <option value="Hoàn thành">Hoàn thành</option>
+              <option value="Đã hủy">Đã hủy</option>
+            </select>
+          </div>
+          <div class="form-actions">
+            <button
+              type="button"
+              class="btn-secondary"
+              onclick="closeModal('modal-order-status')"
+            >
+              Hủy
+            </button>
+            <button type="submit" class="btn-primary">Cập nhật</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL XÁC NHẬN XÓA -->
+    <div id="modal-confirm-delete" class="modal">
+      <div class="modal-content">
+        <button
+          class="modal-close"
+          onclick="closeModal('modal-confirm-delete')"
+        >
+          ×
+        </button>
+        <h2>Xác nhận xóa</h2>
+        <div id="delete-message" class="confirm-message"></div>
+        <div class="form-actions">
+          <button
+            type="button"
+            class="btn-secondary"
+            onclick="closeModal('modal-confirm-delete')"
+          >
+            Hủy
+          </button>
+          <button type="button" class="btn-danger" onclick="confirmDelete()">
+            Xóa
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- MODAL THÊM/SỬA SẢN PHẨM -->
     <div id="modal-product-form" class="modal">
       <div class="modal-content">
@@ -298,12 +288,10 @@
         <h2 id="form-title">Thêm sản phẩm mới</h2>
         <form id="product-form" onsubmit="handleProductSubmit(event)">
           <input type="hidden" id="form-product-id" />
-
           <div class="form-group">
             <label>Tên sản phẩm <span class="required">*</span></label>
             <input type="text" id="form-name" required />
           </div>
-
           <div class="form-row">
             <div class="form-group">
               <label>Danh mục <span class="required">*</span></label>
@@ -314,7 +302,6 @@
               <select id="form-supplier"></select>
             </div>
           </div>
-
           <div class="form-row">
             <div class="form-group">
               <label>Vùng miền <span class="required">*</span></label>
@@ -329,7 +316,6 @@
               <input type="text" id="form-unit" placeholder="Kg, nải, quả..." />
             </div>
           </div>
-
           <div class="form-row">
             <div class="form-group">
               <label>Giá nhập (VNĐ)</label>
@@ -340,7 +326,6 @@
               <input type="number" id="form-price" required step="1000" />
             </div>
           </div>
-
           <div class="form-row">
             <div class="form-group">
               <label>Số lượng tồn</label>
@@ -351,7 +336,6 @@
               <input type="date" id="form-expiry" />
             </div>
           </div>
-
           <div class="form-group">
             <label>Upload ảnh sản phẩm</label>
             <input
@@ -370,16 +354,14 @@
               "
             />
           </div>
-
           <div class="form-group">
-            <label>Mô tả chi tiết (lưu vào MongoDB)</label>
+            <label>Mô tả chi tiết</label>
             <textarea
               id="form-description"
               rows="4"
               placeholder="Nhập mô tả chi tiết về sản phẩm..."
             ></textarea>
           </div>
-
           <div class="form-actions">
             <button
               type="button"
@@ -400,7 +382,7 @@
         <button class="modal-close" onclick="closeModal('modal-order-form')">
           ×
         </button>
-        <h2>🛒 Tạo đơn hàng mới</h2>
+        <h2>Tạo đơn hàng mới</h2>
         <form id="order-form" onsubmit="handleOrderSubmit(event)">
           <div class="form-row">
             <div class="form-group">
@@ -416,7 +398,6 @@
               </select>
             </div>
           </div>
-
           <div class="form-group">
             <label>Sản phẩm đặt hàng</label>
             <button
@@ -428,7 +409,6 @@
             </button>
             <div id="order-items-list" style="margin-top: 10px"></div>
           </div>
-
           <div class="form-actions">
             <button
               type="button"
@@ -452,12 +432,10 @@
         <h2 id="customer-form-title">Thêm khách hàng mới</h2>
         <form id="customer-form" onsubmit="handleCustomerSubmit(event)">
           <input type="hidden" id="form-customer-id" />
-
           <div class="form-group">
             <label>Tên khách hàng <span class="required">*</span></label>
             <input type="text" id="form-customer-name" required />
           </div>
-
           <div class="form-row">
             <div class="form-group">
               <label>Email</label>
@@ -468,12 +446,10 @@
               <input type="tel" id="form-customer-phone" />
             </div>
           </div>
-
           <div class="form-group">
             <label>Địa chỉ</label>
             <input type="text" id="form-customer-address" />
           </div>
-
           <div class="form-row">
             <div class="form-group">
               <label>Vùng miền <span class="required">*</span></label>
@@ -492,7 +468,6 @@
               </select>
             </div>
           </div>
-
           <div class="form-actions">
             <button
               type="button"
@@ -502,6 +477,99 @@
               Hủy
             </button>
             <button type="submit" class="btn-primary">Lưu</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL THÊM/SỬA KHO -->
+    <div id="modal-warehouse-form" class="modal">
+      <div class="modal-content">
+        <button
+          class="modal-close"
+          onclick="closeModal('modal-warehouse-form')"
+        >
+          ×
+        </button>
+        <h2 id="warehouse-form-title">Thêm kho mới</h2>
+        <form id="warehouse-form" onsubmit="handleWarehouseSubmit(event)">
+          <input type="hidden" id="form-warehouse-id" />
+          <div class="form-group">
+            <label>Tên kho <span class="required">*</span></label>
+            <input type="text" id="form-warehouse-name" required />
+          </div>
+          <div class="form-group">
+            <label>Chi nhánh <span class="required">*</span></label>
+            <select id="form-warehouse-branch" required></select>
+          </div>
+          <div class="form-group">
+            <label>Địa chỉ kho</label>
+            <input type="text" id="form-warehouse-address" />
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Người quản lý</label>
+              <input type="text" id="form-warehouse-manager" />
+            </div>
+            <div class="form-group">
+              <label>Sức chứa</label>
+              <input type="number" id="form-warehouse-capacity" />
+            </div>
+          </div>
+          <div class="form-actions">
+            <button
+              type="button"
+              class="btn-secondary"
+              onclick="closeModal('modal-warehouse-form')"
+            >
+              Hủy
+            </button>
+            <button type="submit" class="btn-primary">Lưu</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL CẬP NHẬT TỒN KHO -->
+    <div id="modal-inventory-update" class="modal">
+      <div class="modal-content">
+        <button
+          class="modal-close"
+          onclick="closeModal('modal-inventory-update')"
+        >
+          ×
+        </button>
+        <h2>Cập nhật tồn kho</h2>
+        <form
+          id="inventory-update-form"
+          onsubmit="handleInventoryUpdate(event)"
+        >
+          <input type="hidden" id="form-inventory-id" />
+          <div class="form-group">
+            <label>Sản phẩm</label>
+            <input type="text" id="form-inventory-product" readonly />
+          </div>
+          <div class="form-group">
+            <label>Kho</label>
+            <input type="text" id="form-inventory-warehouse" readonly />
+          </div>
+          <div class="form-group">
+            <label>Số lượng tồn hiện tại</label>
+            <input type="number" id="form-inventory-current" readonly />
+          </div>
+          <div class="form-group">
+            <label>Số lượng tồn mới <span class="required">*</span></label>
+            <input type="number" id="form-inventory-new" required min="0" />
+          </div>
+          <div class="form-actions">
+            <button
+              type="button"
+              class="btn-secondary"
+              onclick="closeModal('modal-inventory-update')"
+            >
+              Hủy
+            </button>
+            <button type="submit" class="btn-primary">Cập nhật</button>
           </div>
         </form>
       </div>

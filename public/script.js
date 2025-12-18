@@ -4,22 +4,27 @@ let categories = [];
 let suppliers = [];
 let customers = [];
 let products = [];
+let branches = [];
+let warehouses = [];
+let deleteCallback = null;
 
 // Sort state
 let sortConfig = {
   products: { by: "MaHangHoa", order: "DESC" },
   orders: { by: "NgayDatHang", order: "DESC" },
   customers: { by: "NgayDangKy", order: "DESC" },
+  warehouses: { by: "MaKho", order: "DESC" },
 };
 
 // =================================================================
 // INITIALIZATION
 // =================================================================
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("🌾 Dashboard khởi động...");
+  console.log("Dashboard khởi động...");
   loadCategories();
   loadSuppliers();
   loadCustomers();
+  loadBranches();
   loadProducts();
   checkSystemHealth();
   setupEventListeners();
@@ -30,10 +35,24 @@ function setupEventListeners() {
     .getElementById("region-filter")
     .addEventListener("change", loadCurrentTabData);
 
-  const searchInput = document.getElementById("search-products");
-  if (searchInput) {
-    searchInput.addEventListener("keyup", (e) => {
+  const searchProducts = document.getElementById("search-products");
+  if (searchProducts) {
+    searchProducts.addEventListener("keyup", (e) => {
       if (e.key === "Enter") loadProducts();
+    });
+  }
+
+  const searchOrders = document.getElementById("search-orders");
+  if (searchOrders) {
+    searchOrders.addEventListener("keyup", (e) => {
+      if (e.key === "Enter") loadOrders();
+    });
+  }
+
+  const searchCustomers = document.getElementById("search-customers");
+  if (searchCustomers) {
+    searchCustomers.addEventListener("keyup", (e) => {
+      if (e.key === "Enter") loadCustomers();
     });
   }
 }
@@ -67,6 +86,12 @@ function loadCurrentTabData() {
     case "customers":
       loadCustomers();
       break;
+    case "inventory":
+      loadInventory();
+      break;
+    case "warehouses":
+      loadWarehouses();
+      break;
     case "statistics":
       loadStatistics();
       break;
@@ -84,19 +109,19 @@ async function checkSystemHealth() {
 
     if (data.success) {
       dot.classList.add("healthy");
-      console.log("✅ Hệ thống hoạt động:", data);
+      console.log("Hệ thống hoạt động:", data);
     } else {
       dot.classList.remove("healthy");
-      console.error("❌ Hệ thống lỗi:", data);
+      console.error("Hệ thống lỗi:", data);
     }
   } catch (error) {
-    console.error("❌ Không kết nối được server:", error);
+    console.error("Không kết nối được server:", error);
     document.getElementById("health-dot").classList.remove("healthy");
   }
 }
 
 // =================================================================
-// LOAD CATEGORIES, SUPPLIERS, CUSTOMERS
+// LOAD CATEGORIES, SUPPLIERS, CUSTOMERS, BRANCHES
 // =================================================================
 async function loadCategories() {
   try {
@@ -124,16 +149,39 @@ async function loadSuppliers() {
   }
 }
 
-async function loadCustomersData() {
+async function loadCustomers() {
   try {
-    const response = await fetch(`${API_URL}/customers?limit=500`);
+    const search = document.getElementById("search-customers")?.value || "";
+    let url = `${API_URL}/customers?limit=500&sortBy=${sortConfig.customers.by}&sortOrder=${sortConfig.customers.order}`;
+    if (search) url += `&search=${encodeURIComponent(search)}`;
+
+    const response = await fetch(url);
     const data = await response.json();
     if (data.success) {
       customers = data.data;
       updateCustomerSelect();
+      if (currentTab === "customers") {
+        renderCustomersTable(data.data);
+        document.getElementById(
+          "customers-count"
+        ).textContent = `${data.count} khách hàng`;
+      }
     }
   } catch (error) {
     console.error("Lỗi load khách hàng:", error);
+  }
+}
+
+async function loadBranches() {
+  try {
+    const response = await fetch(`${API_URL}/branches`);
+    const data = await response.json();
+    if (data.success) {
+      branches = data.data;
+      updateBranchSelect();
+    }
+  } catch (error) {
+    console.error("Lỗi load chi nhánh:", error);
   }
 }
 
@@ -166,6 +214,15 @@ function updateCustomerSelect() {
   });
 }
 
+function updateBranchSelect() {
+  const select = document.getElementById("form-warehouse-branch");
+  if (!select) return;
+  select.innerHTML = '<option value="">Chọn chi nhánh</option>';
+  branches.forEach((b) => {
+    select.innerHTML += `<option value="${b.MaChiNhanh}">${b.TenChiNhanh} (${b.VungMien})</option>`;
+  });
+}
+
 // =================================================================
 // PRODUCTS - CRUD
 // =================================================================
@@ -174,7 +231,7 @@ async function loadProducts() {
   const region = document.getElementById("region-filter").value;
   const search = document.getElementById("search-products")?.value || "";
 
-  wrapper.innerHTML = '<div class="loading">⏳ Đang tải dữ liệu...</div>';
+  wrapper.innerHTML = '<div class="loading">Đang tải dữ liệu...</div>';
 
   try {
     let url = `${API_URL}/products?limit=100&sortBy=${sortConfig.products.by}&sortOrder=${sortConfig.products.order}`;
@@ -188,12 +245,11 @@ async function loadProducts() {
       products = data.data;
       renderProductsTable(data.data);
     } else {
-      wrapper.innerHTML =
-        '<div class="no-data">😢 Không tìm thấy sản phẩm</div>';
+      wrapper.innerHTML = '<div class="no-data">Không tìm thấy sản phẩm</div>';
     }
   } catch (error) {
     console.error("Lỗi load sản phẩm:", error);
-    wrapper.innerHTML = '<div class="error">❌ Lỗi kết nối server</div>';
+    wrapper.innerHTML = '<div class="error">Lỗi kết nối server</div>';
   }
 }
 
@@ -260,6 +316,9 @@ function renderProductsTable(products) {
           <button class="btn-secondary btn-sm" onclick="editProduct(${
             p.MaHangHoa
           })">Sửa</button>
+          <button class="btn-danger btn-sm" onclick="confirmDeleteProduct(${
+            p.MaHangHoa
+          }, '${p.TenHangHoa}')">Xóa</button>
         </td>
       </tr>
     `;
@@ -274,8 +333,7 @@ async function viewProductDetail(id) {
   const content = document.getElementById("product-detail-content");
 
   modal.style.display = "block";
-  content.innerHTML =
-    '<div class="loading">⏳ Đang tải chi tiết từ SQL + MongoDB...</div>';
+  content.innerHTML = '<div class="loading">Đang tải chi tiết...</div>';
 
   try {
     const response = await fetch(`${API_URL}/product/${id}`);
@@ -298,7 +356,7 @@ async function viewProductDetail(id) {
     if (p.HinhAnh && p.HinhAnh.length > 0) {
       html += `<div class="product-images"><img src="${p.HinhAnh[0]}" alt="${p.TenHangHoa}" class="main-image" /></div>`;
     } else {
-      html += `<div class="no-image">📷 Chưa có ảnh</div>`;
+      html += `<div class="no-image">Chưa có ảnh</div>`;
     }
 
     html += `
@@ -333,13 +391,13 @@ async function viewProductDetail(id) {
     `;
 
     if (p.MoTaChiTiet) {
-      html += `<div class="product-description"><h3>Mô tả chi tiết (MongoDB)</h3><p>${p.MoTaChiTiet}</p></div>`;
+      html += `<div class="product-description"><h3>Mô tả chi tiết</h3><p>${p.MoTaChiTiet}</p></div>`;
     }
 
     if (p.ThongTinMoRong && Object.keys(p.ThongTinMoRong).length > 0) {
       html += `
         <div class="extended-info">
-          <h3>ℹThông tin mở rộng (MongoDB)</h3>
+          <h3>Thông tin mở rộng</h3>
           <div class="info-grid">
             ${Object.entries(p.ThongTinMoRong)
               .map(
@@ -357,7 +415,7 @@ async function viewProductDetail(id) {
     if (p.DanhGia && p.DanhGia.length > 0) {
       html += `
         <div class="reviews">
-          <h3>⭐ Đánh giá (MongoDB)</h3>
+          <h3>Đánh giá</h3>
           ${p.DanhGia.map(
             (r) => `
             <div class="review-item">
@@ -373,12 +431,12 @@ async function viewProductDetail(id) {
           ).join("")}
         </div>
       `;
-    };
+    }
 
     content.innerHTML = html;
   } catch (error) {
     console.error("Lỗi load chi tiết:", error);
-    content.innerHTML = `<div class="error">❌ Lỗi: ${error.message}</div>`;
+    content.innerHTML = `<div class="error">Lỗi: ${error.message}</div>`;
   }
 }
 
@@ -412,6 +470,8 @@ async function editProduct(id) {
         : "";
       document.getElementById("form-description").value = p.MoTaChiTiet || "";
 
+      document.getElementById("form-image").value = "";
+
       const preview = document.getElementById("preview-image");
       if (p.HinhAnh && p.HinhAnh[0]) {
         preview.src = p.HinhAnh[0];
@@ -423,7 +483,7 @@ async function editProduct(id) {
       document.getElementById("modal-product-form").style.display = "block";
     }
   } catch (error) {
-    alert("Lỗi tải sản phẩm: " + error.message);
+    showNotification("Lỗi tải sản phẩm: " + error.message, "error");
   }
 }
 
@@ -484,14 +544,50 @@ async function handleProductSubmit(e) {
     const result = await response.json();
 
     if (result.success) {
-      alert(id ? "Cập nhật thành công!" : "Thêm sản phẩm thành công!");
+      showNotification(
+        id ? "Cập nhật thành công!" : "Thêm sản phẩm thành công!",
+        "success"
+      );
       closeModal("modal-product-form");
       loadProducts();
     } else {
-      alert("❌ Lỗi: " + result.message);
+      showNotification("Lỗi: " + result.message, "error");
     }
   } catch (error) {
-    alert("❌ Lỗi khi lưu: " + error.message);
+    showNotification("Lỗi khi lưu: " + error.message, "error");
+  }
+}
+
+function confirmDeleteProduct(id, name) {
+  const message = `<p>Xác nhận xóa sản phẩm <strong>"${name}"</strong>?</p>
+    <p class="warning-text">Hành động này sẽ xóa:</p>
+    <ul>
+      <li>Dữ liệu SQL Server</li>
+      <li>Dữ liệu MongoDB</li>
+      <li>Ảnh trên Cloudinary</li>
+    </ul>`;
+
+  document.getElementById("delete-message").innerHTML = message;
+  document.getElementById("modal-confirm-delete").style.display = "block";
+  deleteCallback = () => deleteProduct(id);
+}
+
+async function deleteProduct(id) {
+  try {
+    const response = await fetch(`${API_URL}/product/${id}`, {
+      method: "DELETE",
+    });
+    const result = await response.json();
+
+    if (result.success) {
+      showNotification("Xóa sản phẩm thành công!", "success");
+      closeModal("modal-confirm-delete");
+      loadProducts();
+    } else {
+      showNotification("Lỗi: " + result.message, "error");
+    }
+  } catch (error) {
+    showNotification("Lỗi khi xóa: " + error.message, "error");
   }
 }
 
@@ -501,12 +597,14 @@ async function handleProductSubmit(e) {
 async function loadOrders() {
   const wrapper = document.getElementById("orders-table");
   const region = document.getElementById("region-filter").value;
+  const search = document.getElementById("search-orders")?.value || "";
   const countBadge = document.getElementById("orders-count");
 
   wrapper.innerHTML = '<div class="loading">Đang tải đơn hàng...</div>';
 
   try {
     let url = `${API_URL}/orders?limit=100&sortBy=${sortConfig.orders.by}&sortOrder=${sortConfig.orders.order}`;
+    if (search) url += `&search=${encodeURIComponent(search)}`;
     if (region) url += `&vungmien=${region}`;
 
     const response = await fetch(url);
@@ -520,7 +618,7 @@ async function loadOrders() {
       countBadge.textContent = "0 đơn hàng";
     }
   } catch (error) {
-    wrapper.innerHTML = '<div class="error">Lỗi kết nối :(</div>';
+    wrapper.innerHTML = '<div class="error">Lỗi kết nối</div>';
   }
 }
 
@@ -558,9 +656,12 @@ function renderOrdersTable(orders) {
           <button class="btn-primary btn-sm" onclick="viewOrderDetail('${
             o.MaDonHang
           }')">Xem</button>
-          <button class="btn-secondary btn-sm" onclick="editOrderStatus('${
+          <button class="btn-secondary btn-sm" onclick="openEditOrderStatus('${
             o.MaDonHang
           }', '${o.TrangThaiDonHang}')">Cập nhật</button>
+          <button class="btn-danger btn-sm" onclick="confirmDeleteOrder('${
+            o.MaDonHang
+          }', '${o.TenKhachHang}')">Xóa</button>
         </td>
       </tr>
     `;
@@ -571,56 +672,155 @@ function renderOrdersTable(orders) {
 }
 
 async function viewOrderDetail(id) {
+  const modal = document.getElementById("modal-order-detail");
+  const content = document.getElementById("order-detail-content");
+
+  modal.style.display = "block";
+  content.innerHTML = '<div class="loading">Đang tải chi tiết...</div>';
+
   try {
     const response = await fetch(`${API_URL}/order/${id}`);
     const result = await response.json();
     if (!result.success) throw new Error(result.message);
 
     const o = result.data;
-    alert(
-      `Đơn hàng: ${id}\nKhách: ${
-        o.KhachHang.TenKhachHang
-      }\nTổng: ${formatCurrency(o.TongTien)}\nChi tiết: ${
-        o.ChiTiet.length
-      } sản phẩm`
-    );
+
+    let html = `
+      <div class="order-detail">
+        <div class="order-header">
+          <h2>Chi tiết đơn hàng</h2>
+          <code>${id.substring(0, 8)}...</code>
+        </div>
+        
+        <div class="order-info">
+          <h3>Thông tin khách hàng</h3>
+          <div class="info-grid">
+            <div><span>Tên:</span><strong>${
+              o.KhachHang.TenKhachHang
+            }</strong></div>
+            <div><span>SĐT:</span><span>${
+              o.KhachHang.SoDienThoai || "N/A"
+            }</span></div>
+            <div><span>Email:</span><span>${
+              o.KhachHang.Email || "N/A"
+            }</span></div>
+            <div><span>Địa chỉ:</span><span>${
+              o.KhachHang.DiaChi || "N/A"
+            }</span></div>
+          </div>
+
+          <h3>Thông tin đơn hàng</h3>
+          <div class="info-grid">
+            <div><span>Ngày đặt:</span><span>${new Date(
+              o.NgayDatHang
+            ).toLocaleString("vi-VN")}</span></div>
+            <div><span>Trạng thái:</span><strong>${
+              o.TrangThaiDonHang
+            }</strong></div>
+            <div><span>Vùng miền:</span><span class="region-badge region-${
+              o.VungMien
+            }">${getRegionName(o.VungMien)}</span></div>
+            <div><span>Tổng tiền:</span><strong class="highlight">${formatCurrency(
+              o.TongTien
+            )}</strong></div>
+          </div>
+
+          <h3>Sản phẩm đặt hàng (${o.ChiTiet.length} mục)</h3>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Sản phẩm</th>
+                <th>Đơn giá</th>
+                <th>Số lượng</th>
+                <th>Thành tiền</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${o.ChiTiet.map(
+                (item) => `
+                <tr>
+                  <td><strong>${item.TenHangHoa}</strong></td>
+                  <td>${formatCurrency(item.DonGia)}</td>
+                  <td>${item.SoLuong} ${item.DonViTinh}</td>
+                  <td><strong>${formatCurrency(item.ThanhTien)}</strong></td>
+                </tr>
+              `
+              ).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    content.innerHTML = html;
   } catch (error) {
-    alert("Lỗi: " + error.message);
+    content.innerHTML = `<div class="error">Lỗi: ${error.message}</div>`;
   }
 }
 
-async function editOrderStatus(id, currentStatus) {
-  const statuses = ["Chờ xử lý", "Đang giao", "Hoàn thành", "Đã hủy"];
-  const newStatus = prompt(
-    `Trạng thái hiện tại: ${currentStatus}\n\nChọn trạng thái mới:\n${statuses
-      .map((s, i) => `${i + 1}. ${s}`)
-      .join("\n")}`
-  );
+function openEditOrderStatus(id, currentStatus) {
+  document.getElementById("status-order-id").value = id;
+  document.getElementById("status-current").value = currentStatus;
+  document.getElementById("status-new").value = currentStatus;
+  document.getElementById("modal-order-status").style.display = "block";
+}
 
-  if (!newStatus || isNaN(newStatus)) return;
-  const status = statuses[parseInt(newStatus) - 1];
-  if (!status) return alert("Lựa chọn không hợp lệ");
+async function handleOrderStatusSubmit(e) {
+  e.preventDefault();
+
+  const id = document.getElementById("status-order-id").value;
+  const newStatus = document.getElementById("status-new").value;
 
   try {
     const response = await fetch(`${API_URL}/order/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ TrangThaiDonHang: status }),
+      body: JSON.stringify({ TrangThaiDonHang: newStatus }),
     });
     const result = await response.json();
+
     if (result.success) {
-      alert("Cập nhật thành công!");
+      showNotification("Cập nhật thành công!", "success");
+      closeModal("modal-order-status");
       loadOrders();
     } else {
-      alert("Lỗi: " + result.message);
+      showNotification("Lỗi: " + result.message, "error");
     }
   } catch (error) {
-    alert("Lỗi: " + error.message);
+    showNotification("Lỗi: " + error.message, "error");
+  }
+}
+
+function confirmDeleteOrder(id, customerName) {
+  const message = `<p>Xác nhận xóa đơn hàng của <strong>"${customerName}"</strong>?</p>
+    <p>Mã đơn: <code>${id.substring(0, 8)}...</code></p>`;
+
+  document.getElementById("delete-message").innerHTML = message;
+  document.getElementById("modal-confirm-delete").style.display = "block";
+  deleteCallback = () => deleteOrder(id);
+}
+
+async function deleteOrder(id) {
+  try {
+    const response = await fetch(`${API_URL}/order/${id}`, {
+      method: "DELETE",
+    });
+    const result = await response.json();
+
+    if (result.success) {
+      showNotification("Xóa đơn hàng thành công!", "success");
+      closeModal("modal-confirm-delete");
+      loadOrders();
+    } else {
+      showNotification("Lỗi: " + result.message, "error");
+    }
+  } catch (error) {
+    showNotification("Lỗi khi xóa: " + error.message, "error");
   }
 }
 
 function openAddOrderModal() {
-  loadCustomersData();
+  loadCustomers();
   document.getElementById("modal-order-form").style.display = "block";
   document.getElementById("order-items-list").innerHTML = "";
 }
@@ -670,7 +870,10 @@ async function handleOrderSubmit(e) {
       }
     });
 
-  if (items.length === 0) return alert("Vui lòng thêm ít nhất 1 sản phẩm!");
+  if (items.length === 0) {
+    showNotification("Vui lòng thêm ít nhất 1 sản phẩm!", "error");
+    return;
+  }
 
   try {
     const response = await fetch(`${API_URL}/order`, {
@@ -686,60 +889,61 @@ async function handleOrderSubmit(e) {
 
     const result = await response.json();
     if (result.success) {
-      alert("Tạo đơn hàng thành công!");
+      showNotification("Tạo đơn hàng thành công!", "success");
       closeModal("modal-order-form");
       loadOrders();
     } else {
-      alert("Lỗi: " + result.message);
+      showNotification("Lỗi: " + result.message, "error");
     }
   } catch (error) {
-    alert("Lỗi: " + error.message);
+    showNotification("Lỗi: " + error.message, "error");
   }
 }
 
 // =================================================================
 // CUSTOMERS
 // =================================================================
-async function loadCustomers() {
-  const wrapper = document.getElementById("customers-table");
-  const region = document.getElementById("region-filter").value;
-  const countBadge = document.getElementById("customers-count");
-
-  wrapper.innerHTML = '<div class="loading">Đang tải khách hàng...</div>';
-
-  try {
-    let url = `${API_URL}/customers?limit=100&sortBy=${sortConfig.customers.by}&sortOrder=${sortConfig.customers.order}`;
-    if (region) url += `&vungmien=${region}`;
-
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data.success && data.data.length > 0) {
-      countBadge.textContent = `${data.count} khách hàng`;
-      renderCustomersTable(data.data);
-    } else {
-      wrapper.innerHTML = '<div class="no-data">Không có khách hàng</div>';
-      countBadge.textContent = "0 khách hàng";
-    }
-  } catch (error) {
-    wrapper.innerHTML = '<div class="error">Lỗi kết nối :(</div>';
-  }
-}
-
 function renderCustomersTable(customers) {
   const wrapper = document.getElementById("customers-table");
+
+  const sortIcons = {
+    MaKhachHang:
+      sortConfig.customers.by === "MaKhachHang"
+        ? sortConfig.customers.order === "ASC"
+          ? "↑"
+          : "↓"
+        : "",
+    TenKhachHang:
+      sortConfig.customers.by === "TenKhachHang"
+        ? sortConfig.customers.order === "ASC"
+          ? "↑"
+          : "↓"
+        : "",
+    DiemTichLuy:
+      sortConfig.customers.by === "DiemTichLuy"
+        ? sortConfig.customers.order === "ASC"
+          ? "↑"
+          : "↓"
+        : "",
+    NgayDangKy:
+      sortConfig.customers.by === "NgayDangKy"
+        ? sortConfig.customers.order === "ASC"
+          ? "↑"
+          : "↓"
+        : "",
+  };
 
   let html = `
     <table class="data-table">
       <thead>
         <tr>
-          <th onclick="sortTable('customers', 'MaKhachHang')" style="cursor:pointer">Mã KH</th>
-          <th onclick="sortTable('customers', 'TenKhachHang')" style="cursor:pointer">Tên khách hàng</th>
+          <th onclick="sortTable('customers', 'MaKhachHang')" style="cursor:pointer">Mã KH ${sortIcons.MaKhachHang}</th>
+          <th onclick="sortTable('customers', 'TenKhachHang')" style="cursor:pointer">Tên khách hàng ${sortIcons.TenKhachHang}</th>
           <th>Email</th>
           <th>SĐT</th>
           <th>Vùng miền</th>
           <th>Loại KH</th>
-          <th onclick="sortTable('customers', 'DiemTichLuy')" style="cursor:pointer">Điểm</th>
+          <th onclick="sortTable('customers', 'DiemTichLuy')" style="cursor:pointer">Điểm ${sortIcons.DiemTichLuy}</th>
           <th>Thao tác</th>
         </tr>
       </thead>
@@ -762,6 +966,9 @@ function renderCustomersTable(customers) {
           <button class="btn-secondary btn-sm" onclick="editCustomer(${
             c.MaKhachHang
           })">Sửa</button>
+          <button class="btn-danger btn-sm" onclick="confirmDeleteCustomer(${
+            c.MaKhachHang
+          }, '${c.TenKhachHang}')">Xóa</button>
         </td>
       </tr>
     `;
@@ -800,7 +1007,7 @@ async function editCustomer(id) {
       document.getElementById("modal-customer-form").style.display = "block";
     }
   } catch (error) {
-    alert("Lỗi tải khách hàng: " + error.message);
+    showNotification("Lỗi tải khách hàng: " + error.message, "error");
   }
 }
 
@@ -829,14 +1036,344 @@ async function handleCustomerSubmit(e) {
 
     const result = await response.json();
     if (result.success) {
-      alert(id ? "Cập nhật thành công!" : "Thêm khách hàng thành công!");
+      showNotification(
+        id ? "Cập nhật thành công!" : "Thêm khách hàng thành công!",
+        "success"
+      );
       closeModal("modal-customer-form");
       loadCustomers();
     } else {
-      alert("Lỗi: " + result.message);
+      showNotification("Lỗi: " + result.message, "error");
     }
   } catch (error) {
-    alert("Lỗi: " + error.message);
+    showNotification("Lỗi: " + error.message, "error");
+  }
+}
+
+function confirmDeleteCustomer(id, name) {
+  const message = `<p>Xác nhận xóa khách hàng <strong>"${name}"</strong>?</p>
+    <p class="warning-text">Lưu ý: Không thể xóa khách hàng đã có đơn hàng.</p>`;
+
+  document.getElementById("delete-message").innerHTML = message;
+  document.getElementById("modal-confirm-delete").style.display = "block";
+  deleteCallback = () => deleteCustomer(id);
+}
+
+async function deleteCustomer(id) {
+  try {
+    const response = await fetch(`${API_URL}/customer/${id}`, {
+      method: "DELETE",
+    });
+    const result = await response.json();
+
+    if (result.success) {
+      showNotification("Xóa khách hàng thành công!", "success");
+      closeModal("modal-confirm-delete");
+      loadCustomers();
+    } else {
+      showNotification(result.message, "error");
+    }
+  } catch (error) {
+    showNotification("Lỗi khi xóa: " + error.message, "error");
+  }
+}
+
+// =================================================================
+// INVENTORY (TỒN KHO)
+// =================================================================
+async function loadInventory() {
+  const wrapper = document.getElementById("inventory-table");
+  const countBadge = document.getElementById("inventory-count");
+  const region = document.getElementById("region-filter").value;
+
+  wrapper.innerHTML = '<div class="loading">Đang tải tồn kho...</div>';
+
+  try {
+    let url = `${API_URL}/inventory`;
+    if (region) url += `?vungmien=${region}`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.success && data.data.length > 0) {
+      countBadge.textContent = `${data.count} mục`;
+      renderInventoryTable(data.data);
+    } else {
+      wrapper.innerHTML = '<div class="no-data">Không có dữ liệu tồn kho</div>';
+      countBadge.textContent = "0 mục";
+    }
+  } catch (error) {
+    wrapper.innerHTML = '<div class="error">Lỗi kết nối</div>';
+  }
+}
+
+function renderInventoryTable(inventory) {
+  const wrapper = document.getElementById("inventory-table");
+
+  let html = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Mã</th>
+          <th>Sản phẩm</th>
+          <th>Kho</th>
+          <th>Chi nhánh</th>
+          <th>Vùng miền</th>
+          <th>Số lượng tồn</th>
+          <th>Ngày cập nhật</th>
+          <th>Thao tác</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  inventory.forEach((item) => {
+    html += `
+      <tr>
+        <td><strong>#${item.MaTonKho}</strong></td>
+        <td><strong>${item.TenHangHoa}</strong></td>
+        <td>${item.TenKho}</td>
+        <td>${item.TenChiNhanh}</td>
+        <td><span class="region-badge region-${item.VungMien}">${getRegionName(
+      item.VungMien
+    )}</span></td>
+        <td><strong>${item.SoLuongTon} ${item.DonViTinh || ""}</strong></td>
+        <td>${new Date(item.NgayCapNhat).toLocaleDateString("vi-VN")}</td>
+        <td>
+          <button class="btn-primary btn-sm" onclick="viewInventoryDetail(${
+            item.MaTonKho
+          })">Xem</button>
+          <button class="btn-secondary btn-sm" onclick="openInventoryUpdate(${
+            item.MaTonKho
+          }, '${item.TenHangHoa}', '${item.TenKho}', ${
+      item.SoLuongTon
+    })">Cập nhật</button>
+        </td>
+      </tr>
+    `;
+  });
+
+  html += `</tbody></table>`;
+  wrapper.innerHTML = html;
+}
+
+async function viewInventoryDetail(id) {
+  const modal = document.getElementById("modal-inventory-detail");
+  const content = document.getElementById("inventory-detail-content");
+
+  modal.style.display = "block";
+  content.innerHTML = '<div class="loading">Đang tải chi tiết...</div>';
+
+  try {
+    const response = await fetch(`${API_URL}/inventory`);
+    const data = await response.json();
+    const item = data.data.find((i) => i.MaTonKho === id);
+
+    if (!item) throw new Error("Không tìm thấy thông tin");
+
+    let html = `
+      <div class="inventory-detail">
+        <h2>Chi tiết tồn kho #${item.MaTonKho}</h2>
+        <div class="info-grid">
+          <div><span>Sản phẩm:</span><strong>${item.TenHangHoa}</strong></div>
+          <div><span>Kho:</span><span>${item.TenKho}</span></div>
+          <div><span>Chi nhánh:</span><span>${item.TenChiNhanh}</span></div>
+          <div><span>Vùng miền:</span><span class="region-badge region-${
+            item.VungMien
+          }">${getRegionName(item.VungMien)}</span></div>
+          <div><span>Số lượng tồn:</span><strong class="highlight">${
+            item.SoLuongTon
+          } ${item.DonViTinh || ""}</strong></div>
+          <div><span>Ngày cập nhật:</span><span>${new Date(
+            item.NgayCapNhat
+          ).toLocaleString("vi-VN")}</span></div>
+        </div>
+      </div>
+    `;
+
+    content.innerHTML = html;
+  } catch (error) {
+    content.innerHTML = `<div class="error">Lỗi: ${error.message}</div>`;
+  }
+}
+
+function openInventoryUpdate(id, productName, warehouseName, currentQty) {
+  document.getElementById("form-inventory-id").value = id;
+  document.getElementById("form-inventory-product").value = productName;
+  document.getElementById("form-inventory-warehouse").value = warehouseName;
+  document.getElementById("form-inventory-current").value = currentQty;
+  document.getElementById("form-inventory-new").value = currentQty;
+  document.getElementById("modal-inventory-update").style.display = "block";
+}
+
+async function handleInventoryUpdate(e) {
+  e.preventDefault();
+
+  const id = document.getElementById("form-inventory-id").value;
+  const newQty = document.getElementById("form-inventory-new").value;
+
+  try {
+    const response = await fetch(`${API_URL}/inventory/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ SoLuongTon: parseInt(newQty) }),
+    });
+
+    const result = await response.json();
+    if (result.success) {
+      showNotification("Cập nhật tồn kho thành công!", "success");
+      closeModal("modal-inventory-update");
+      loadInventory();
+    } else {
+      showNotification("Lỗi: " + result.message, "error");
+    }
+  } catch (error) {
+    showNotification("Lỗi: " + error.message, "error");
+  }
+}
+
+// =================================================================
+// WAREHOUSES & INVENTORY
+// =================================================================
+async function loadWarehouses() {
+  const wrapper = document.getElementById("warehouses-table");
+  wrapper.innerHTML = '<div class="loading">Đang tải kho...</div>';
+
+  try {
+    const response = await fetch(`${API_URL}/warehouses`);
+    const data = await response.json();
+
+    if (data.success && data.data.length > 0) {
+      warehouses = data.data;
+      renderWarehousesTable(data.data);
+      document.getElementById(
+        "warehouses-count"
+      ).textContent = `${data.count} kho`;
+    } else {
+      wrapper.innerHTML = '<div class="no-data">Không có kho</div>';
+      document.getElementById("warehouses-count").textContent = "0 kho";
+    }
+  } catch (error) {
+    wrapper.innerHTML = '<div class="error">Lỗi kết nối</div>';
+  }
+}
+
+function renderWarehousesTable(warehouses) {
+  const wrapper = document.getElementById("warehouses-table");
+
+  let html = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Mã kho</th>
+          <th>Tên kho</th>
+          <th>Chi nhánh</th>
+          <th>Vùng miền</th>
+          <th>Địa chỉ</th>
+          <th>Người quản lý</th>
+          <th>Sức chứa</th>
+          <th>Thao tác</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  warehouses.forEach((w) => {
+    html += `
+      <tr>
+        <td><strong>#${w.MaKho}</strong></td>
+        <td><strong>${w.TenKho}</strong></td>
+        <td>${w.TenChiNhanh || "N/A"}</td>
+        <td><span class="region-badge region-${w.VungMien}">${getRegionName(
+      w.VungMien
+    )}</span></td>
+        <td>${w.DiaChiKho || "N/A"}</td>
+        <td>${w.NguoiQuanLy || "N/A"}</td>
+        <td>${w.SucChua || "N/A"}</td>
+        <td>
+          <button class="btn-secondary btn-sm" onclick="editWarehouse(${
+            w.MaKho
+          })">Sửa</button>
+        </td>
+      </tr>
+    `;
+  });
+
+  html += `</tbody></table>`;
+  wrapper.innerHTML = html;
+}
+
+function openAddWarehouseModal() {
+  document.getElementById("warehouse-form").reset();
+  document.getElementById("form-warehouse-id").value = "";
+  document.getElementById("warehouse-form-title").textContent = "Thêm kho mới";
+  document.getElementById("modal-warehouse-form").style.display = "block";
+}
+
+async function editWarehouse(id) {
+  try {
+    const response = await fetch(`${API_URL}/warehouse/${id}`);
+    const result = await response.json();
+
+    if (result.success) {
+      const w = result.data;
+      document.getElementById("warehouse-form-title").textContent = "Sửa kho";
+      document.getElementById("form-warehouse-id").value = w.MaKho;
+      document.getElementById("form-warehouse-name").value = w.TenKho;
+      document.getElementById("form-warehouse-branch").value = w.MaChiNhanh;
+      document.getElementById("form-warehouse-address").value =
+        w.DiaChiKho || "";
+      document.getElementById("form-warehouse-manager").value =
+        w.NguoiQuanLy || "";
+      document.getElementById("form-warehouse-capacity").value =
+        w.SucChua || "";
+
+      document.getElementById("modal-warehouse-form").style.display = "block";
+    }
+  } catch (error) {
+    showNotification("Lỗi tải kho: " + error.message, "error");
+  }
+}
+
+async function handleWarehouseSubmit(e) {
+  e.preventDefault();
+
+  const id = document.getElementById("form-warehouse-id").value;
+  const data = {
+    TenKho: document.getElementById("form-warehouse-name").value,
+    MaChiNhanh: parseInt(
+      document.getElementById("form-warehouse-branch").value
+    ),
+    DiaChiKho: document.getElementById("form-warehouse-address").value,
+    NguoiQuanLy: document.getElementById("form-warehouse-manager").value,
+    SucChua:
+      parseInt(document.getElementById("form-warehouse-capacity").value) ||
+      null,
+  };
+
+  try {
+    const url = id ? `${API_URL}/warehouse/${id}` : `${API_URL}/warehouse`;
+    const method = id ? "PUT" : "POST";
+
+    const response = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    const result = await response.json();
+    if (result.success) {
+      showNotification(
+        id ? "Cập nhật thành công!" : "Thêm kho thành công!",
+        "success"
+      );
+      closeModal("modal-warehouse-form");
+      loadWarehouses();
+    } else {
+      showNotification("Lỗi: " + result.message, "error");
+    }
+  } catch (error) {
+    showNotification("Lỗi: " + error.message, "error");
   }
 }
 
@@ -873,7 +1410,7 @@ async function loadStatistics() {
 
       html += `
         <div class="stat-card">
-          <h3>🍃 MongoDB</h3>
+          <h3>MongoDB</h3>
           <div class="stat-value">${
             stats.tongQuan.tongSanPhamCoChiTiet || 0
           }</div>
@@ -888,7 +1425,7 @@ async function loadStatistics() {
       wrapper.innerHTML = html;
     }
   } catch (error) {
-    wrapper.innerHTML = '<div class="error">Lỗi tải thống kê :(</div>';
+    wrapper.innerHTML = '<div class="error">Lỗi tải thống kê</div>';
   }
 }
 
@@ -907,12 +1444,50 @@ function sortTable(table, column) {
 }
 
 // =================================================================
-// UTILITIES
+// MODAL & DELETE CONFIRMATION
 // =================================================================
 function closeModal(modalId) {
   document.getElementById(modalId).style.display = "none";
 }
 
+function confirmDelete() {
+  if (deleteCallback) {
+    deleteCallback();
+    deleteCallback = null;
+  }
+}
+
+// =================================================================
+// NOTIFICATION SYSTEM
+// =================================================================
+function showNotification(message, type = "info") {
+  const existingNotif = document.querySelector(".notification");
+  if (existingNotif) {
+    existingNotif.remove();
+  }
+
+  const notif = document.createElement("div");
+  notif.className = `notification notification-${type}`;
+  notif.innerHTML = `
+    <span>${message}</span>
+    <button onclick="this.parentElement.remove()">×</button>
+  `;
+
+  document.body.appendChild(notif);
+
+  setTimeout(() => {
+    notif.classList.add("show");
+  }, 10);
+
+  setTimeout(() => {
+    notif.classList.remove("show");
+    setTimeout(() => notif.remove(), 300);
+  }, 3000);
+}
+
+// =================================================================
+// UTILITIES
+// =================================================================
 function getRegionName(code) {
   const names = {
     MienBac: "Miền Bắc",

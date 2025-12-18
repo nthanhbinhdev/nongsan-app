@@ -72,7 +72,11 @@ async function initializeDatabases() {
   }
 }
 
-// GET: Lấy danh sách sản phẩm (có sort)
+// ============================================================
+// PRODUCTS - CRUD
+// ============================================================
+
+// GET: Lấy danh sách sản phẩm
 app.get("/api/products", async (req, res) => {
   try {
     const {
@@ -122,7 +126,7 @@ app.get("/api/products", async (req, res) => {
   }
 });
 
-// GET: Lấy chi tiết sản phẩm (POLYGLOT PERSISTENCE)
+// GET: Lấy chi tiết sản phẩm
 app.get("/api/product/:id", async (req, res) => {
   try {
     const maHangHoa = parseInt(req.params.id);
@@ -172,7 +176,7 @@ app.get("/api/product/:id", async (req, res) => {
   }
 });
 
-// POST: Thêm sản phẩm mới (có upload ảnh)
+// POST: Thêm sản phẩm mới
 app.post("/api/product", upload.single("image"), async (req, res) => {
   try {
     const {
@@ -207,7 +211,7 @@ app.post("/api/product", upload.single("image"), async (req, res) => {
 
     const newId = result.recordset[0].MaHangHoa;
 
-    // Lưu ảnh vào MongoDB nếu có
+    // Lưu ảnh vào MongoDB
     const imageUrl = req.file ? req.file.path : null;
     await mongoDB.collection("hanghoa_details").insertOne({
       MaHangHoa: newId,
@@ -234,7 +238,7 @@ app.post("/api/product", upload.single("image"), async (req, res) => {
   }
 });
 
-// PUT: Cập nhật sản phẩm (có thể upload ảnh mới)
+// PUT: Cập nhật sản phẩm (SỬA LẠI ĐỂ XỬ LÝ ẢNH TỐT HƠN)
 app.put("/api/product/:id", upload.single("image"), async (req, res) => {
   try {
     const maHangHoa = parseInt(req.params.id);
@@ -246,6 +250,9 @@ app.put("/api/product/:id", upload.single("image"), async (req, res) => {
       MoTaChiTiet,
       DonViTinh,
       VungMien,
+      DonGiaNhap,
+      MaNhaCungCap,
+      HanSuDung,
     } = req.body;
 
     // Cập nhật SQL Server
@@ -257,17 +264,47 @@ app.put("/api/product/:id", upload.single("image"), async (req, res) => {
       .input("DonGiaBan", sql.Decimal(18, 2), DonGiaBan)
       .input("SoLuongTon", sql.Int, SoLuongTon)
       .input("DonViTinh", sql.NVarChar, DonViTinh)
-      .input("VungMien", sql.NVarChar, VungMien).query(`
+      .input("VungMien", sql.NVarChar, VungMien)
+      .input("DonGiaNhap", sql.Decimal(18, 2), DonGiaNhap || 0)
+      .input("MaNhaCungCap", sql.Int, MaNhaCungCap || null)
+      .input("HanSuDung", sql.Date, HanSuDung || null).query(`
         UPDATE HangHoa 
         SET TenHangHoa = @TenHangHoa, MaDanhMuc = @MaDanhMuc, DonGiaBan = @DonGiaBan, 
-            SoLuongTon = @SoLuongTon, DonViTinh = @DonViTinh, VungMien = @VungMien
+            SoLuongTon = @SoLuongTon, DonViTinh = @DonViTinh, VungMien = @VungMien,
+            DonGiaNhap = @DonGiaNhap, MaNhaCungCap = @MaNhaCungCap, HanSuDung = @HanSuDung
         WHERE MaHangHoa = @MaHangHoa
       `);
 
     // Cập nhật MongoDB
-    const updateData = { updatedAt: new Date() };
-    if (MoTaChiTiet !== undefined) updateData.MoTaChiTiet = MoTaChiTiet;
-    if (req.file) updateData.$push = { HinhAnh: req.file.path };
+    const updateData = {
+      TenHangHoa,
+      MoTaChiTiet: MoTaChiTiet || "",
+      updatedAt: new Date(),
+    };
+
+    // Nếu có ảnh mới, xóa ảnh cũ trên Cloudinary và cập nhật
+    if (req.file) {
+      const oldData = await mongoDB
+        .collection("hanghoa_details")
+        .findOne({ MaHangHoa: maHangHoa });
+
+      if (oldData && oldData.HinhAnh && oldData.HinhAnh.length > 0) {
+        // Xóa ảnh cũ trên Cloudinary
+        for (const imgUrl of oldData.HinhAnh) {
+          try {
+            const publicId = extractPublicId(imgUrl);
+            if (publicId) {
+              await cloudinary.uploader.destroy(publicId);
+              console.log(`Đã xóa ảnh cũ: ${publicId}`);
+            }
+          } catch (err) {
+            console.error("Lỗi xóa ảnh cũ:", err.message);
+          }
+        }
+      }
+
+      updateData.HinhAnh = [req.file.path];
+    }
 
     await mongoDB
       .collection("hanghoa_details")
@@ -288,33 +325,78 @@ app.put("/api/product/:id", upload.single("image"), async (req, res) => {
   }
 });
 
-// DELETE: Xóa sản phẩm (Soft delete)
+// DELETE: Xóa sản phẩm (SQL + MongoDB + Cloudinary)
 app.delete("/api/product/:id", async (req, res) => {
   try {
     const maHangHoa = parseInt(req.params.id);
+
+    // 1. Lấy thông tin ảnh từ MongoDB
+    const mongoData = await mongoDB
+      .collection("hanghoa_details")
+      .findOne({ MaHangHoa: maHangHoa });
+
+    // 2. Xóa ảnh trên Cloudinary
+    if (mongoData && mongoData.HinhAnh && mongoData.HinhAnh.length > 0) {
+      for (const imgUrl of mongoData.HinhAnh) {
+        try {
+          const publicId = extractPublicId(imgUrl);
+          if (publicId) {
+            await cloudinary.uploader.destroy(publicId);
+            console.log(`Đã xóa ảnh Cloudinary: ${publicId}`);
+          }
+        } catch (err) {
+          console.error("Lỗi xóa ảnh Cloudinary:", err.message);
+        }
+      }
+    }
+
+    // 3. Xóa MongoDB
+    await mongoDB
+      .collection("hanghoa_details")
+      .deleteOne({ MaHangHoa: maHangHoa });
+    console.log(`Đã xóa MongoDB: MaHangHoa=${maHangHoa}`);
+
+    // 4. Xóa SQL (soft delete)
     await sqlPool
       .request()
       .input("MaHangHoa", sql.Int, maHangHoa)
       .query("UPDATE HangHoa SET TrangThai = 0 WHERE MaHangHoa = @MaHangHoa");
+    console.log(`Đã xóa SQL: MaHangHoa=${maHangHoa}`);
 
     res.json({ success: true, message: "Xóa sản phẩm thành công" });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Lỗi khi xóa sản phẩm",
-        error: error.message,
-      });
+    console.error("Lỗi DELETE /api/product/:id:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi xóa sản phẩm",
+      error: error.message,
+    });
   }
 });
 
+// Helper: Extract Cloudinary public_id from URL
+function extractPublicId(url) {
+  try {
+    const match = url.match(/\/([^\/]+)\.(jpg|jpeg|png|webp)$/);
+    if (match) {
+      return `nongsan-images/${match[1]}`;
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
 
-// GET: Lấy danh sách đơn hàng (có sort)
+// ============================================================
+// ORDERS - CRUD
+// ============================================================
+
+// [UPDATED] Lấy danh sách đơn hàng (Filter, Search, Sort, Pagination)
 app.get("/api/orders", async (req, res) => {
   try {
     const {
       vungmien,
+      search,
       limit = 100,
       sortBy = "NgayDatHang",
       sortOrder = "DESC",
@@ -340,6 +422,7 @@ app.get("/api/orders", async (req, res) => {
     `;
 
     if (vungmien) query += ` AND d.VungMien = '${vungmien}'`;
+    if (search) query += ` AND k.TenKhachHang LIKE N'%${search}%'`;
     query += ` ORDER BY d.${orderBy} ${order}`;
     query += ` OFFSET 0 ROWS FETCH NEXT ${limit} ROWS ONLY`;
 
@@ -359,7 +442,6 @@ app.get("/api/orders", async (req, res) => {
   }
 });
 
-// GET: Lấy chi tiết đơn hàng
 app.get("/api/order/:id", async (req, res) => {
   try {
     const maDonHang = req.params.id;
@@ -416,18 +498,15 @@ app.get("/api/order/:id", async (req, res) => {
   }
 });
 
-// POST: Tạo đơn hàng mới
 app.post("/api/order", async (req, res) => {
   try {
     const { MaKhachHang, VungMien, TrangThaiDonHang, ChiTiet } = req.body;
 
-    // Tính tổng tiền
     const tongTien = ChiTiet.reduce(
       (sum, item) => sum + item.SoLuong * item.DonGia,
       0
     );
 
-    // Insert đơn hàng
     const orderResult = await sqlPool
       .request()
       .input("MaKhachHang", sql.Int, MaKhachHang)
@@ -442,7 +521,6 @@ app.post("/api/order", async (req, res) => {
 
     const maDonHang = orderResult.recordset[0].MaDonHang;
 
-    // Insert chi tiết đơn hàng
     for (const item of ChiTiet) {
       await sqlPool
         .request()
@@ -464,17 +542,14 @@ app.post("/api/order", async (req, res) => {
     });
   } catch (error) {
     console.error("Lỗi POST /api/order:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Lỗi khi tạo đơn hàng",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi tạo đơn hàng",
+      error: error.message,
+    });
   }
 });
 
-// PUT: Cập nhật trạng thái đơn hàng
 app.put("/api/order/:id", async (req, res) => {
   try {
     const maDonHang = req.params.id;
@@ -491,22 +566,52 @@ app.put("/api/order/:id", async (req, res) => {
 
     res.json({ success: true, message: "Cập nhật đơn hàng thành công" });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Lỗi khi cập nhật đơn hàng",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi cập nhật đơn hàng",
+      error: error.message,
+    });
   }
 });
 
+// DELETE: Xóa đơn hàng (xóa chi tiết trước, sau đó xóa đơn)
+app.delete("/api/order/:id", async (req, res) => {
+  try {
+    const maDonHang = req.params.id;
 
-// GET: Lấy danh sách khách hàng (có sort)
+    // Xóa chi tiết đơn hàng trước
+    await sqlPool
+      .request()
+      .input("MaDonHang", sql.UniqueIdentifier, maDonHang)
+      .query("DELETE FROM ChiTietDonHang WHERE MaDonHang = @MaDonHang");
+
+    // Xóa đơn hàng
+    await sqlPool
+      .request()
+      .input("MaDonHang", sql.UniqueIdentifier, maDonHang)
+      .query("DELETE FROM DonHang WHERE MaDonHang = @MaDonHang");
+
+    res.json({ success: true, message: "Xóa đơn hàng thành công" });
+  } catch (error) {
+    console.error("Lỗi DELETE /api/order/:id:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi xóa đơn hàng",
+      error: error.message,
+    });
+  }
+});
+
+// ============================================================
+// CUSTOMERS - CRUD
+// ============================================================
+
+// [UPDATED] Lấy danh sách khách hàng (Filter, Search, Sort, Pagination)
 app.get("/api/customers", async (req, res) => {
   try {
     const {
       vungmien,
+      search,
       limit = 100,
       sortBy = "NgayDangKy",
       sortOrder = "DESC",
@@ -529,6 +634,9 @@ app.get("/api/customers", async (req, res) => {
     `;
 
     if (vungmien) query += ` AND k.VungMien = '${vungmien}'`;
+    if (search) {
+      query += ` AND (k.TenKhachHang LIKE N'%${search}%' OR k.SoDienThoai LIKE '%${search}%')`;
+    }
     query += ` ORDER BY k.${orderBy} ${order}`;
     query += ` OFFSET 0 ROWS FETCH NEXT ${limit} ROWS ONLY`;
 
@@ -548,7 +656,6 @@ app.get("/api/customers", async (req, res) => {
   }
 });
 
-// GET: Lấy chi tiết khách hàng
 app.get("/api/customer/:id", async (req, res) => {
   try {
     const maKhachHang = parseInt(req.params.id);
@@ -569,17 +676,14 @@ app.get("/api/customer/:id", async (req, res) => {
 
     res.json({ success: true, data: result.recordset[0] });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Lỗi khi lấy chi tiết khách hàng",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi lấy chi tiết khách hàng",
+      error: error.message,
+    });
   }
 });
 
-// POST: Thêm khách hàng mới
 app.post("/api/customer", async (req, res) => {
   try {
     const {
@@ -612,17 +716,14 @@ app.post("/api/customer", async (req, res) => {
     });
   } catch (error) {
     console.error("Lỗi POST /api/customer:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Lỗi khi thêm khách hàng",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi thêm khách hàng",
+      error: error.message,
+    });
   }
 });
 
-// PUT: Cập nhật khách hàng
 app.put("/api/customer/:id", async (req, res) => {
   try {
     const maKhachHang = parseInt(req.params.id);
@@ -645,31 +746,366 @@ app.put("/api/customer/:id", async (req, res) => {
 
     res.json({ success: true, message: "Cập nhật khách hàng thành công" });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Lỗi khi cập nhật khách hàng",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi cập nhật khách hàng",
+      error: error.message,
+    });
   }
 });
 
+// DELETE: Xóa khách hàng
+app.delete("/api/customer/:id", async (req, res) => {
+  try {
+    const maKhachHang = parseInt(req.params.id);
+
+    // Kiểm tra xem khách hàng có đơn hàng không
+    const checkOrders = await sqlPool
+      .request()
+      .input("MaKhachHang", sql.Int, maKhachHang)
+      .query(
+        "SELECT COUNT(*) as Count FROM DonHang WHERE MaKhachHang = @MaKhachHang"
+      );
+
+    if (checkOrders.recordset[0].Count > 0) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Không thể xóa khách hàng đã có đơn hàng. Vui lòng xóa đơn hàng trước.",
+      });
+    }
+
+    // Xóa khách hàng
+    await sqlPool
+      .request()
+      .input("MaKhachHang", sql.Int, maKhachHang)
+      .query("DELETE FROM KhachHang WHERE MaKhachHang = @MaKhachHang");
+
+    res.json({ success: true, message: "Xóa khách hàng thành công" });
+  } catch (error) {
+    console.error("Lỗi DELETE /api/customer/:id:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi xóa khách hàng",
+      error: error.message,
+    });
+  }
+});
+
+// ============================================================
+// WAREHOUSE & INVENTORY - CRUD
+// ============================================================
+
+// GET: Lấy danh sách kho
+app.get("/api/warehouses", async (req, res) => {
+  try {
+    const result = await sqlPool.request().query(`
+      SELECT k.*, cn.TenChiNhanh, cn.VungMien
+      FROM Kho k
+      LEFT JOIN ChiNhanh cn ON k.MaChiNhanh = cn.MaChiNhanh
+      WHERE k.TrangThai = 1
+      ORDER BY k.MaKho DESC
+    `);
+
+    res.json({
+      success: true,
+      count: result.recordset.length,
+      data: result.recordset,
+    });
+  } catch (error) {
+    console.error("Lỗi GET /api/warehouses:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi lấy danh sách kho",
+      error: error.message,
+    });
+  }
+});
+
+// GET: Chi tiết kho
+app.get("/api/warehouse/:id", async (req, res) => {
+  try {
+    const maKho = parseInt(req.params.id);
+    const result = await sqlPool.request().input("MaKho", sql.Int, maKho)
+      .query(`
+        SELECT k.*, cn.TenChiNhanh, cn.VungMien
+        FROM Kho k
+        LEFT JOIN ChiNhanh cn ON k.MaChiNhanh = cn.MaChiNhanh
+        WHERE k.MaKho = @MaKho
+      `);
+
+    if (result.recordset.length === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Không tìm thấy kho" });
+    }
+
+    res.json({ success: true, data: result.recordset[0] });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi lấy chi tiết kho",
+      error: error.message,
+    });
+  }
+});
+
+// POST: Thêm kho mới
+app.post("/api/warehouse", async (req, res) => {
+  try {
+    const { MaChiNhanh, TenKho, DiaChiKho, NguoiQuanLy, SucChua } = req.body;
+
+    const result = await sqlPool
+      .request()
+      .input("MaChiNhanh", sql.Int, MaChiNhanh)
+      .input("TenKho", sql.NVarChar, TenKho)
+      .input("DiaChiKho", sql.NVarChar, DiaChiKho || null)
+      .input("NguoiQuanLy", sql.NVarChar, NguoiQuanLy || null)
+      .input("SucChua", sql.Int, SucChua || null).query(`
+        INSERT INTO Kho (MaChiNhanh, TenKho, DiaChiKho, NguoiQuanLy, SucChua, TrangThai)
+        OUTPUT INSERTED.MaKho
+        VALUES (@MaChiNhanh, @TenKho, @DiaChiKho, @NguoiQuanLy, @SucChua, 1)
+      `);
+
+    res.json({
+      success: true,
+      message: "Thêm kho thành công",
+      data: { MaKho: result.recordset[0].MaKho },
+    });
+  } catch (error) {
+    console.error("Lỗi POST /api/warehouse:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi thêm kho",
+      error: error.message,
+    });
+  }
+});
+
+// PUT: Cập nhật kho
+app.put("/api/warehouse/:id", async (req, res) => {
+  try {
+    const maKho = parseInt(req.params.id);
+    const { TenKho, DiaChiKho, NguoiQuanLy, SucChua } = req.body;
+
+    await sqlPool
+      .request()
+      .input("MaKho", sql.Int, maKho)
+      .input("TenKho", sql.NVarChar, TenKho)
+      .input("DiaChiKho", sql.NVarChar, DiaChiKho)
+      .input("NguoiQuanLy", sql.NVarChar, NguoiQuanLy)
+      .input("SucChua", sql.Int, SucChua).query(`
+        UPDATE Kho 
+        SET TenKho = @TenKho, DiaChiKho = @DiaChiKho, 
+            NguoiQuanLy = @NguoiQuanLy, SucChua = @SucChua
+        WHERE MaKho = @MaKho
+      `);
+
+    res.json({ success: true, message: "Cập nhật kho thành công" });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi cập nhật kho",
+      error: error.message,
+    });
+  }
+});
+
+// DELETE: Xóa kho
+app.delete("/api/warehouse/:id", async (req, res) => {
+  try {
+    const maKho = parseInt(req.params.id);
+
+    // Xóa tồn kho trước
+    await sqlPool
+      .request()
+      .input("MaKho", sql.Int, maKho)
+      .query("DELETE FROM TonKho WHERE MaKho = @MaKho");
+
+    // Xóa kho (soft delete)
+    await sqlPool
+      .request()
+      .input("MaKho", sql.Int, maKho)
+      .query("UPDATE Kho SET TrangThai = 0 WHERE MaKho = @MaKho");
+
+    res.json({ success: true, message: "Xóa kho thành công" });
+  } catch (error) {
+    console.error("Lỗi DELETE /api/warehouse/:id:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi xóa kho",
+      error: error.message,
+    });
+  }
+});
+
+// GET: Lấy danh sách tồn kho
+app.get("/api/inventory", async (req, res) => {
+  try {
+    const { vungmien } = req.query;
+
+    let query = `
+      SELECT tk.*, k.TenKho, cn.TenChiNhanh, cn.VungMien, h.TenHangHoa, h.DonViTinh
+      FROM TonKho tk
+      LEFT JOIN Kho k ON tk.MaKho = k.MaKho
+      LEFT JOIN ChiNhanh cn ON tk.MaChiNhanh = cn.MaChiNhanh
+      LEFT JOIN HangHoa h ON tk.MaHangHoa = h.MaHangHoa
+      WHERE k.TrangThai = 1
+    `;
+
+    if (vungmien) query += ` AND cn.VungMien = '${vungmien}'`;
+    query += ` ORDER BY tk.NgayCapNhat DESC`;
+
+    const result = await sqlPool.request().query(query);
+    res.json({
+      success: true,
+      count: result.recordset.length,
+      data: result.recordset,
+    });
+  } catch (error) {
+    console.error("Lỗi GET /api/inventory:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi lấy danh sách tồn kho",
+      error: error.message,
+    });
+  }
+});
+
+// PUT: Cập nhật số lượng tồn kho
+app.put("/api/inventory/:id", async (req, res) => {
+  try {
+    const maTonKho = parseInt(req.params.id);
+    const { SoLuongTon } = req.body;
+
+    await sqlPool
+      .request()
+      .input("MaTonKho", sql.Int, maTonKho)
+      .input("SoLuongTon", sql.Int, SoLuongTon)
+      .input("NgayCapNhat", sql.DateTime, new Date()).query(`
+        UPDATE TonKho 
+        SET SoLuongTon = @SoLuongTon, NgayCapNhat = @NgayCapNhat
+        WHERE MaTonKho = @MaTonKho
+      `);
+
+    res.json({ success: true, message: "Cập nhật tồn kho thành công" });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi cập nhật tồn kho",
+      error: error.message,
+    });
+  }
+});
+
+// ============================================================
+// CATEGORIES & SUPPLIERS - CRUD
+// ============================================================
 
 app.get("/api/categories", async (req, res) => {
   try {
     const result = await sqlPool
       .request()
-      .query("SELECT * FROM DanhMuc WHERE TrangThai = 1");
+      .query(
+        "SELECT * FROM DanhMuc WHERE TrangThai = 1 ORDER BY MaDanhMuc DESC"
+      );
     res.json({ success: true, data: result.recordset });
   } catch (error) {
-    res
-      .status(500)
-      .json({
+    console.error("Lỗi GET /api/categories:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi lấy danh mục",
+      error: error.message,
+    });
+  }
+});
+
+app.post("/api/category", async (req, res) => {
+  try {
+    const { TenDanhMuc, LoaiDanhMuc } = req.body;
+
+    const result = await sqlPool
+      .request()
+      .input("TenDanhMuc", sql.NVarChar, TenDanhMuc)
+      .input("LoaiDanhMuc", sql.NVarChar, LoaiDanhMuc || null).query(`
+        INSERT INTO DanhMuc (TenDanhMuc, LoaiDanhMuc, TrangThai)
+        OUTPUT INSERTED.MaDanhMuc
+        VALUES (@TenDanhMuc, @LoaiDanhMuc, 1)
+      `);
+
+    res.json({
+      success: true,
+      message: "Thêm danh mục thành công",
+      data: { MaDanhMuc: result.recordset[0].MaDanhMuc },
+    });
+  } catch (error) {
+    console.error("Lỗi POST /api/category:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi thêm danh mục",
+      error: error.message,
+    });
+  }
+});
+
+app.put("/api/category/:id", async (req, res) => {
+  try {
+    const maDanhMuc = parseInt(req.params.id);
+    const { TenDanhMuc, LoaiDanhMuc } = req.body;
+
+    await sqlPool
+      .request()
+      .input("MaDanhMuc", sql.Int, maDanhMuc)
+      .input("TenDanhMuc", sql.NVarChar, TenDanhMuc)
+      .input("LoaiDanhMuc", sql.NVarChar, LoaiDanhMuc).query(`
+        UPDATE DanhMuc 
+        SET TenDanhMuc = @TenDanhMuc, LoaiDanhMuc = @LoaiDanhMuc
+        WHERE MaDanhMuc = @MaDanhMuc
+      `);
+
+    res.json({ success: true, message: "Cập nhật danh mục thành công" });
+  } catch (error) {
+    console.error("Lỗi PUT /api/category/:id:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi cập nhật danh mục",
+      error: error.message,
+    });
+  }
+});
+
+app.delete("/api/category/:id", async (req, res) => {
+  try {
+    const maDanhMuc = parseInt(req.params.id);
+
+    // Kiểm tra xem có sản phẩm nào thuộc danh mục này không
+    const checkProducts = await sqlPool
+      .request()
+      .input("MaDanhMuc", sql.Int, maDanhMuc)
+      .query(
+        "SELECT COUNT(*) as Count FROM HangHoa WHERE MaDanhMuc = @MaDanhMuc"
+      );
+
+    if (checkProducts.recordset[0].Count > 0) {
+      return res.status(400).json({
         success: false,
-        message: "Lỗi khi lấy danh mục",
-        error: error.message,
+        message: "Không thể xóa danh mục đang có sản phẩm",
       });
+    }
+
+    await sqlPool
+      .request()
+      .input("MaDanhMuc", sql.Int, maDanhMuc)
+      .query("UPDATE DanhMuc SET TrangThai = 0 WHERE MaDanhMuc = @MaDanhMuc");
+
+    res.json({ success: true, message: "Xóa danh mục thành công" });
+  } catch (error) {
+    console.error("Lỗi DELETE /api/category/:id:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi xóa danh mục",
+      error: error.message,
+    });
   }
 });
 
@@ -677,19 +1113,171 @@ app.get("/api/suppliers", async (req, res) => {
   try {
     const result = await sqlPool
       .request()
-      .query("SELECT * FROM NhaCungCap WHERE TrangThai = 1");
+      .query(
+        "SELECT * FROM NhaCungCap WHERE TrangThai = 1 ORDER BY MaNhaCungCap DESC"
+      );
     res.json({ success: true, data: result.recordset });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Lỗi khi lấy nhà cung cấp",
-        error: error.message,
-      });
+    console.error("Lỗi GET /api/suppliers:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi lấy nhà cung cấp",
+      error: error.message,
+    });
   }
 });
 
+app.post("/api/supplier", async (req, res) => {
+  try {
+    const { TenNhaCungCap, DiaChi, SoDienThoai, Email } = req.body;
+
+    const result = await sqlPool
+      .request()
+      .input("TenNhaCungCap", sql.NVarChar, TenNhaCungCap)
+      .input("DiaChi", sql.NVarChar, DiaChi || null)
+      .input("SoDienThoai", sql.NVarChar, SoDienThoai || null)
+      .input("Email", sql.NVarChar, Email || null).query(`
+        INSERT INTO NhaCungCap (TenNhaCungCap, DiaChi, SoDienThoai, Email, TrangThai)
+        OUTPUT INSERTED.MaNhaCungCap
+        VALUES (@TenNhaCungCap, @DiaChi, @SoDienThoai, @Email, 1)
+      `);
+
+    res.json({
+      success: true,
+      message: "Thêm nhà cung cấp thành công",
+      data: { MaNhaCungCap: result.recordset[0].MaNhaCungCap },
+    });
+  } catch (error) {
+    console.error("Lỗi POST /api/supplier:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi thêm nhà cung cấp",
+      error: error.message,
+    });
+  }
+});
+
+app.put("/api/supplier/:id", async (req, res) => {
+  try {
+    const maNhaCungCap = parseInt(req.params.id);
+    const { TenNhaCungCap, DiaChi, SoDienThoai, Email } = req.body;
+
+    await sqlPool
+      .request()
+      .input("MaNhaCungCap", sql.Int, maNhaCungCap)
+      .input("TenNhaCungCap", sql.NVarChar, TenNhaCungCap)
+      .input("DiaChi", sql.NVarChar, DiaChi)
+      .input("SoDienThoai", sql.NVarChar, SoDienThoai)
+      .input("Email", sql.NVarChar, Email).query(`
+        UPDATE NhaCungCap 
+        SET TenNhaCungCap = @TenNhaCungCap, DiaChi = @DiaChi, 
+            SoDienThoai = @SoDienThoai, Email = @Email
+        WHERE MaNhaCungCap = @MaNhaCungCap
+      `);
+
+    res.json({ success: true, message: "Cập nhật nhà cung cấp thành công" });
+  } catch (error) {
+    console.error("Lỗi PUT /api/supplier/:id:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi cập nhật nhà cung cấp",
+      error: error.message,
+    });
+  }
+});
+
+app.delete("/api/supplier/:id", async (req, res) => {
+  try {
+    const maNhaCungCap = parseInt(req.params.id);
+
+    // Kiểm tra xem có sản phẩm nào từ nhà cung cấp này không
+    const checkProducts = await sqlPool
+      .request()
+      .input("MaNhaCungCap", sql.Int, maNhaCungCap)
+      .query(
+        "SELECT COUNT(*) as Count FROM HangHoa WHERE MaNhaCungCap = @MaNhaCungCap"
+      );
+
+    if (checkProducts.recordset[0].Count > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Không thể xóa nhà cung cấp đang có sản phẩm",
+      });
+    }
+
+    await sqlPool
+      .request()
+      .input("MaNhaCungCap", sql.Int, maNhaCungCap)
+      .query(
+        "UPDATE NhaCungCap SET TrangThai = 0 WHERE MaNhaCungCap = @MaNhaCungCap"
+      );
+
+    res.json({ success: true, message: "Xóa nhà cung cấp thành công" });
+  } catch (error) {
+    console.error("Lỗi DELETE /api/supplier/:id:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi xóa nhà cung cấp",
+      error: error.message,
+    });
+  }
+});
+
+// ============================================================
+// BRANCHES
+// ============================================================
+
+app.get("/api/branches", async (req, res) => {
+  try {
+    const result = await sqlPool
+      .request()
+      .query(
+        "SELECT * FROM ChiNhanh WHERE TrangThai = 1 ORDER BY MaChiNhanh DESC"
+      );
+    res.json({
+      success: true,
+      count: result.recordset.length,
+      data: result.recordset,
+    });
+  } catch (error) {
+    console.error("Lỗi GET /api/branches:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi lấy danh sách chi nhánh",
+      error: error.message,
+    });
+  }
+});
+
+app.get("/api/branch/:id", async (req, res) => {
+  try {
+    const maChiNhanh = parseInt(req.params.id);
+    const result = await sqlPool
+      .request()
+      .input("MaChiNhanh", sql.Int, maChiNhanh)
+      .query("SELECT * FROM ChiNhanh WHERE MaChiNhanh = @MaChiNhanh");
+
+    if (result.recordset.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy chi nhánh",
+      });
+    }
+
+    res.json({ success: true, data: result.recordset[0] });
+  } catch (error) {
+    console.error("Lỗi GET /api/branch/:id:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi lấy chi tiết chi nhánh",
+      error: error.message,
+    });
+  }
+});
+
+// ============================================================
+// HEALTH CHECK & STATISTICS
+// ============================================================
 
 app.get("/api/health", async (req, res) => {
   try {
@@ -706,17 +1294,25 @@ app.get("/api/health", async (req, res) => {
       timestamp: new Date(),
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({ success: false, status: "Unhealthy", error: error.message });
+    console.error("Lỗi Health Check:", error);
+    res.status(500).json({
+      success: false,
+      status: "Unhealthy",
+      error: error.message,
+    });
   }
 });
 
 app.get("/api/statistics", async (req, res) => {
   try {
     const sqlStats = await sqlPool.request().query(`
-      SELECT VungMien, COUNT(*) as SoLuongSanPham, SUM(SoLuongTon) as TongSoLuongTon, AVG(DonGiaBan) as GiaTrungBinh
-      FROM HangHoa WHERE TrangThai = 1 GROUP BY VungMien
+      SELECT VungMien, 
+             COUNT(*) as SoLuongSanPham, 
+             SUM(SoLuongTon) as TongSoLuongTon, 
+             AVG(DonGiaBan) as GiaTrungBinh
+      FROM HangHoa 
+      WHERE TrangThai = 1 
+      GROUP BY VungMien
     `);
 
     const mongoStats = await mongoDB
@@ -734,41 +1330,99 @@ app.get("/api/statistics", async (req, res) => {
 
     res.json({
       success: true,
-      data: { theoVungMien: sqlStats.recordset, tongQuan: mongoStats[0] || {} },
+      data: {
+        theoVungMien: sqlStats.recordset,
+        tongQuan: mongoStats[0] || {},
+      },
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Lỗi khi lấy thống kê",
-        error: error.message,
-      });
+    console.error("Lỗi GET /api/statistics:", error);
+    res.status(500).json({
+      success: false,
+      message: "Lỗi khi lấy thống kê",
+      error: error.message,
+    });
   }
 });
 
-
+// ============================================================
+// ERROR HANDLING
+// ============================================================
 
 app.use((req, res) => {
-  res
-    .status(404)
-    .json({ success: false, message: "API endpoint không tồn tại" });
-});
-
-process.on("SIGINT", async () => {
-  console.log("\n Đang đóng kết nối database...");
-  if (sqlPool) await sqlPool.close();
-  if (mongoClient) await mongoClient.close();
-  console.log("Đã đóng kết nối. Tạm biệt!");
-  process.exit(0);
-});
-
-initializeDatabases().then(() => {
-  app.listen(PORT, () => {
-    console.log(`
-HỆ THỐNG QUẢN LÝ NÔNG SẢN PHÂN TÁN
-Server đang chạy tại: http://localhost:${PORT}
-Dashboard: http://localhost:${PORT}/
-    `);
+  res.status(404).json({
+    success: false,
+    message: "API endpoint không tồn tại",
+    path: req.path,
+    method: req.method,
   });
 });
+
+app.use((error, req, res, next) => {
+  console.error("Server Error:", error);
+  res.status(500).json({
+    success: false,
+    message: "Lỗi server nội bộ",
+    error: process.env.NODE_ENV === "development" ? error.message : undefined,
+  });
+});
+
+// ============================================================
+// GRACEFUL SHUTDOWN
+// ============================================================
+
+process.on("SIGINT", async () => {
+  console.log("\nĐang đóng kết nối database...");
+  try {
+    if (sqlPool) await sqlPool.close();
+    if (mongoClient) await mongoClient.close();
+    console.log("Đã đóng kết nối. Tạm biệt!");
+    process.exit(0);
+  } catch (error) {
+    console.error("Lỗi khi đóng kết nối:", error);
+    process.exit(1);
+  }
+});
+
+process.on("SIGTERM", async () => {
+  console.log("\nNhận tín hiệu SIGTERM...");
+  try {
+    if (sqlPool) await sqlPool.close();
+    if (mongoClient) await mongoClient.close();
+    console.log("Đã đóng kết nối an toàn");
+    process.exit(0);
+  } catch (error) {
+    console.error("Lỗi khi đóng kết nối:", error);
+    process.exit(1);
+  }
+});
+
+// ============================================================
+// START SERVER
+// ============================================================
+
+initializeDatabases()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`
+╔═══════════════════════════════════════════════════════╗
+║   HỆ THỐNG QUẢN LÝ NÔNG SẢN PHÂN TÁN                 ║
+║   Polyglot Persistence Architecture                   ║
+╠═══════════════════════════════════════════════════════╣
+║   Server: http://localhost:${PORT}                       ║
+║   Dashboard: http://localhost:${PORT}/                   ║
+║   Health Check: http://localhost:${PORT}/api/health      ║
+║   Statistics: http://localhost:${PORT}/api/statistics    ║
+╠═══════════════════════════════════════════════════════╣
+║   Database Status:                                    ║
+║   SQL Server - Connected                              ║
+║   MongoDB - Connected                                 ║
+║   Cloudinary - Configured                             ║
+╚═══════════════════════════════════════════════════════╝
+    `);
+    });
+  })
+  .catch((error) => {
+    console.error("Khởi động server thất bại:", error);
+    process.exit(1);
+  });
