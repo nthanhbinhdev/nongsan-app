@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hệ Thống Quản Lý Nông Sản Phân Tán</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- HEADER -->
+    <header class="main-header">
+      <div class="header-container">
+        <div class="logo">
+          <span class="logo-icon"></span>
+          <div class="logo-text">
+            <h1>Hệ Thống Nông Sản</h1>
+          </div>
+        </div>
+        <div class="header-actions">
+          <div class="region-selector">
+            <label>Vùng miền:</label>
+            <select id="region-filter">
+              <option value="">Tất cả</option>
+              <option value="MienBac">Miền Bắc</option>
+              <option value="MienTrung">Miền Trung</option>
+              <option value="MienNam">Miền Nam</option>
+            </select>
+          </div>
+          <button class="btn-health" onclick="checkSystemHealth()">
+            <span id="health-dot" class="health-dot"></span>
+            Trạng thái hệ thống
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- NAVIGATION TABS -->
+    <nav class="tab-navigation">
+      <button
+        class="tab-btn active"
+        data-tab="products"
+        onclick="switchTab('products')"
+      >
+        <span class="tab-icon"></span>
+        <span>Sản phẩm</span>
+      </button>
+      <button class="tab-btn" data-tab="orders" onclick="switchTab('orders')">
+        <span class="tab-icon"></span>
+        <span>Đơn hàng</span>
+      </button>
+      <button
+        class="tab-btn"
+        data-tab="customers"
+        onclick="switchTab('customers')"
+      >
+        <span class="tab-icon"></span>
+        <span>Khách hàng</span>
+      </button>
+      <button
+        class="tab-btn"
+        data-tab="distribution"
+        onclick="switchTab('distribution')"
+      >
+        <span class="tab-icon"></span>
+        <span>Kiến trúc phân tán</span>
+      </button>
+      <button
+        class="tab-btn"
+        data-tab="statistics"
+        onclick="switchTab('statistics')"
+      >
+        <span class="tab-icon"></span>
+        <span>Thống kê</span>
+      </button>
+    </nav>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-container">
+      <!-- TAB: SẢN PHẨM -->
+      <section id="tab-products" class="tab-content active">
+        <div class="section-header">
+          <h2>Danh sách Sản phẩm</h2>
+          <div class="header-actions">
+            <div class="search-box">
+              <input
+                type="text"
+                id="search-products"
+                placeholder="Tìm kiếm sản phẩm..."
+              />
+            </div>
+            <button class="btn-primary" onclick="openAddProductModal()">
+              + Thêm sản phẩm
+            </button>
+          </div>
+        </div>
+        <div id="products-table" class="data-table-wrapper"></div>
+      </section>
+
+      <!-- TAB: ĐƠN HÀNG -->
+      <section id="tab-orders" class="tab-content">
+        <div class="section-header">
+          <h2>Danh sách Đơn hàng</h2>
+          <div class="header-actions">
+            <span class="record-count" id="orders-count">0 đơn hàng</span>
+            <button class="btn-primary" onclick="openAddOrderModal()">
+              + Thêm đơn hàng
+            </button>
+          </div>
+        </div>
+        <div id="orders-table" class="data-table-wrapper"></div>
+      </section>
+
+      <!-- TAB: KHÁCH HÀNG -->
+      <section id="tab-customers" class="tab-content">
+        <div class="section-header">
+          <h2>👥 Danh sách Khách hàng</h2>
+          <div class="header-actions">
+            <span class="record-count" id="customers-count">0 khách hàng</span>
+            <button class="btn-primary" onclick="openAddCustomerModal()">
+              + Thêm khách hàng
+            </button>
+          </div>
+        </div>
+        <div id="customers-table" class="data-table-wrapper"></div>
+      </section>
+
+      <!-- TAB: KIẾN TRÚC PHÂN TÁN -->
+      <section id="tab-distribution" class="tab-content">
+        <div class="section-header">
+          <h2>Kiến trúc Hệ thống Phân tán</h2>
+        </div>
+        <div class="distribution-architecture">
+          <div class="server-card master">
+            <div class="server-icon">🖥️</div>
+            <h3>SERVER (Master/Publisher)</h3>
+            <p class="server-name">DESKTOP-1RUUANR\SERVER</p>
+            <div class="server-details">
+              <div class="detail-item">
+                <span>Database:</span>
+                <strong>NongSan_Master</strong>
+              </div>
+              <div class="detail-item">
+                <span>Vai trò:</span>
+                <strong>Distributor + Publisher</strong>
+              </div>
+              <div class="detail-item">
+                <span>Publications:</span>
+                <strong>3 (Pub_MienBac, Pub_MienTrung, Pub_MienNam)</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="replication-flow">
+            <div class="flow-arrow">
+              <span>Replication</span>
+              <div class="arrow-line"></div>
+            </div>
+          </div>
+
+          <div class="client-servers">
+            <div class="server-card client region-mienbac">
+              <div class="server-icon">💻</div>
+              <h3>CLIENT 1 - Miền Bắc</h3>
+              <p class="server-name">DESKTOP-1RUUANR\CLIENT1</p>
+              <div class="server-details">
+                <div class="detail-item">
+                  <span>Database:</span>
+                  <strong>NongSan_MienBac</strong>
+                </div>
+                <div class="detail-item">
+                  <span>Subscription:</span>
+                  <strong>Pub_MienBac</strong>
+                </div>
+                <div class="detail-item">
+                  <span>Dữ liệu:</span>
+                  <strong>VungMien = 'MienBac'</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="server-card client region-mientrung">
+              <div class="server-icon">💻</div>
+              <h3>CLIENT 2 - Miền Trung</h3>
+              <p class="server-name">DESKTOP-1RUUANR\CLIENT2</p>
+              <div class="server-details">
+                <div class="detail-item">
+                  <span>Database:</span>
+                  <strong>NongSan_MienTrung</strong>
+                </div>
+                <div class="detail-item">
+                  <span>Subscription:</span>
+                  <strong>Pub_MienTrung</strong>
+                </div>
+                <div class="detail-item">
+                  <span>Dữ liệu:</span>
+                  <strong>VungMien = 'MienTrung'</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="server-card client region-miennam">
+              <div class="server-icon">💻</div>
+              <h3>CLIENT 3 - Miền Nam</h3>
+              <p class="server-name">DESKTOP-1RUUANR\CLIENT3</p>
+              <div class="server-details">
+                <div class="detail-item">
+                  <span>Database:</span>
+                  <strong>NongSan_MienNam</strong>
+                </div>
+                <div class="detail-item">
+                  <span>Subscription:</span>
+                  <strong>Pub_MienNam</strong>
+                </div>
+                <div class="detail-item">
+                  <span>Dữ liệu:</span>
+                  <strong>VungMien = 'MienNam'</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="additional-services">
+            <div class="service-card mongodb">
+              <div class="service-icon">🍃</div>
+              <h3>MongoDB</h3>
+              <div class="server-details">
+                <div class="detail-item">
+                  <span>Host:</span>
+                  <strong>localhost:27017</strong>
+                </div>
+                <div class="detail-item">
+                  <span>Database:</span>
+                  <strong>nongsan_db</strong>
+                </div>
+                <div class="detail-item">
+                  <span>Collection:</span>
+                  <strong>hanghoa_details</strong>
+                </div>
+                <div class="detail-item">
+                  <span>Vai trò:</span>
+                  <strong
+                    >Lưu dữ liệu phi cấu trúc (Mô tả, đánh giá, URL ảnh)</strong
+                  >
+                </div>
+              </div>
+            </div>
+
+            <div class="service-card cloudinary">
+              <div class="service-icon">☁️</div>
+              <h3>Cloudinary</h3>
+              <div class="server-details">
+                <div class="detail-item">
+                  <span>Cloud:</span>
+                  <strong>dznbskxv6</strong>
+                </div>
+                <div class="detail-item">
+                  <span>Folder:</span>
+                  <strong>nongsan-images/</strong>
+                </div>
+                <div class="detail-item">
+                  <span>Vai trò:</span>
+                  <strong>Lưu trữ ảnh sản phẩm (Multimedia)</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: THỐNG KÊ -->
+      <section id="tab-statistics" class="tab-content">
+        <div class="section-header">
+          <h2>Thống kê Hệ thống</h2>
+        </div>
+        <div id="statistics-content" class="statistics-grid"></div>
+      </section>
+    </main>
+
+    <!-- MODAL CHI TIẾT SẢN PHẨM -->
+    <div id="modal-product-detail" class="modal">
+      <div class="modal-content modal-large">
+        <button
+          class="modal-close"
+          onclick="closeModal('modal-product-detail')"
+        >
+          ×
+        </button>
+        <div id="product-detail-content"></div>
+      </div>
+    </div>
+
+    <!-- MODAL THÊM/SỬA SẢN PHẨM -->
+    <div id="modal-product-form" class="modal">
+      <div class="modal-content">
+        <button class="modal-close" onclick="closeModal('modal-product-form')">
+          ×
+        </button>
+        <h2 id="form-title">Thêm sản phẩm mới</h2>
+        <form id="product-form" onsubmit="handleProductSubmit(event)">
+          <input type="hidden" id="form-product-id" />
+
+          <div class="form-group">
+            <label>Tên sản phẩm <span class="required">*</span></label>
+            <input type="text" id="form-name" required />
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Danh mục <span class="required">*</span></label>
+              <select id="form-category" required></select>
+            </div>
+            <div class="form-group">
+              <label>Nhà cung cấp</label>
+              <select id="form-supplier"></select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Vùng miền <span class="required">*</span></label>
+              <select id="form-region" required>
+                <option value="MienBac">Miền Bắc</option>
+                <option value="MienTrung">Miền Trung</option>
+                <option value="MienNam">Miền Nam</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Đơn vị tính</label>
+              <input type="text" id="form-unit" placeholder="Kg, nải, quả..." />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Giá nhập (VNĐ)</label>
+              <input type="number" id="form-cost" step="1000" />
+            </div>
+            <div class="form-group">
+              <label>Giá bán (VNĐ) <span class="required">*</span></label>
+              <input type="number" id="form-price" required step="1000" />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Số lượng tồn</label>
+              <input type="number" id="form-stock" value="0" />
+            </div>
+            <div class="form-group">
+              <label>Hạn sử dụng</label>
+              <input type="date" id="form-expiry" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Upload ảnh sản phẩm</label>
+            <input
+              type="file"
+              id="form-image"
+              accept="image/*"
+              onchange="previewProductImage(this)"
+            />
+            <img
+              id="preview-image"
+              style="
+                display: none;
+                max-width: 200px;
+                margin-top: 10px;
+                border-radius: 8px;
+              "
+            />
+          </div>
+
+          <div class="form-group">
+            <label>Mô tả chi tiết (lưu vào MongoDB)</label>
+            <textarea
+              id="form-description"
+              rows="4"
+              placeholder="Nhập mô tả chi tiết về sản phẩm..."
+            ></textarea>
+          </div>
+
+          <div class="form-actions">
+            <button
+              type="button"
+              class="btn-secondary"
+              onclick="closeModal('modal-product-form')"
+            >
+              Hủy
+            </button>
+            <button type="submit" class="btn-primary">Lưu</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL THÊM ĐƠN HÀNG -->
+    <div id="modal-order-form" class="modal">
+      <div class="modal-content">
+        <button class="modal-close" onclick="closeModal('modal-order-form')">
+          ×
+        </button>
+        <h2>🛒 Tạo đơn hàng mới</h2>
+        <form id="order-form" onsubmit="handleOrderSubmit(event)">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Khách hàng <span class="required">*</span></label>
+              <select id="form-order-customer" required></select>
+            </div>
+            <div class="form-group">
+              <label>Vùng miền <span class="required">*</span></label>
+              <select id="form-order-region" required>
+                <option value="MienBac">Miền Bắc</option>
+                <option value="MienTrung">Miền Trung</option>
+                <option value="MienNam">Miền Nam</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Sản phẩm đặt hàng</label>
+            <button
+              type="button"
+              class="btn-primary btn-sm"
+              onclick="addOrderItem()"
+            >
+              + Thêm sản phẩm
+            </button>
+            <div id="order-items-list" style="margin-top: 10px"></div>
+          </div>
+
+          <div class="form-actions">
+            <button
+              type="button"
+              class="btn-secondary"
+              onclick="closeModal('modal-order-form')"
+            >
+              Hủy
+            </button>
+            <button type="submit" class="btn-primary">Tạo đơn</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL THÊM/SỬA KHÁCH HÀNG -->
+    <div id="modal-customer-form" class="modal">
+      <div class="modal-content">
+        <button class="modal-close" onclick="closeModal('modal-customer-form')">
+          ×
+        </button>
+        <h2 id="customer-form-title">Thêm khách hàng mới</h2>
+        <form id="customer-form" onsubmit="handleCustomerSubmit(event)">
+          <input type="hidden" id="form-customer-id" />
+
+          <div class="form-group">
+            <label>Tên khách hàng <span class="required">*</span></label>
+            <input type="text" id="form-customer-name" required />
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Email</label>
+              <input type="email" id="form-customer-email" />
+            </div>
+            <div class="form-group">
+              <label>Số điện thoại</label>
+              <input type="tel" id="form-customer-phone" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Địa chỉ</label>
+            <input type="text" id="form-customer-address" />
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Vùng miền <span class="required">*</span></label>
+              <select id="form-customer-region" required>
+                <option value="MienBac">Miền Bắc</option>
+                <option value="MienTrung">Miền Trung</option>
+                <option value="MienNam">Miền Nam</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Loại khách hàng</label>
+              <select id="form-customer-type">
+                <option value="Thường">Thường</option>
+                <option value="VIP">VIP</option>
+                <option value="Doanh nghiệp">Doanh nghiệp</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button
+              type="button"
+              class="btn-secondary"
+              onclick="closeModal('modal-customer-form')"
+            >
+              Hủy
+            </button>
+            <button type="submit" class="btn-primary">Lưu</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
