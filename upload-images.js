@@ -33,7 +33,7 @@ const imageMapping = {
 const IMAGE_FOLDER = path.join(__dirname, "Product_Images");
 
 async function uploadImages() {
-  console.log("🚀 BẮT ĐẦU UPLOAD ẢNH LÊN CLOUDINARY...\n");
+  console.log("BẮT ĐẦU UPLOAD ẢNH LÊN CLOUDINARY...\n");
 
   const uploadedImages = {};
   const files = fs.readdirSync(IMAGE_FOLDER);
@@ -63,14 +63,14 @@ async function uploadImages() {
       });
 
       uploadedImages[maHangHoa || file] = result.secure_url;
-      console.log(`✅ Thành công: ${result.secure_url}\n`);
+      console.log(`Thành công: ${result.secure_url}\n`);
     } catch (error) {
-      console.error(`❌ Lỗi upload ${file}:`, error.message);
+      console.error(`Lỗi upload ${file}:`, error.message);
     }
   }
 
   // Xuất kết quả
-  console.log("\n📋 KẾT QUẢ UPLOAD:");
+  console.log("\nKẾT QUẢ UPLOAD:");
   console.log(JSON.stringify(uploadedImages, null, 2));
 
   // Lưu vào file
@@ -78,7 +78,7 @@ async function uploadImages() {
     "uploaded-images.json",
     JSON.stringify(uploadedImages, null, 2)
   );
-  console.log("\n💾 Đã lưu danh sách URL vào: uploaded-images.json");
+  console.log("\nĐã lưu danh sách URL vào: uploaded-images.json");
 }
 
 uploadImages().catch(console.error);

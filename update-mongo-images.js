@@ -298,7 +298,7 @@ async function updateMongoImages() {
   } finally {
     if (client) {
       await client.close();
-      console.log("👋 Đã đóng kết nối MongoDB");
+      console.log("Đã đóng kết nối MongoDB");
     }
   }
 }
